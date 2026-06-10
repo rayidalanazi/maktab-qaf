@@ -1,0 +1,252 @@
+import { Topbar } from "@/components/app/Topbar";
+import { PageHeader } from "@/components/app/PageHeader";
+import { StatCard } from "@/components/app/StatCard";
+
+type Outcome = "لصالحنا" | "ضدنا" | "تسوية";
+
+interface ArchivedCase {
+  id: string;
+  no: string;
+  type: string;
+  court: string;
+  outcome: Outcome;
+  closedAt: string;
+  duration: string;
+}
+
+const ARCHIVED_CASES: ArchivedCase[] = [
+  {
+    id: "a1",
+    no: "ق-2024-0117",
+    type: "نزاع تجاري",
+    court: "المحكمة التجارية بالرياض",
+    outcome: "لصالحنا",
+    closedAt: "2026-05-12",
+    duration: "9 أشهر",
+  },
+  {
+    id: "a2",
+    no: "ق-2024-0093",
+    type: "مطالبة مالية",
+    court: "محكمة التنفيذ بالرياض",
+    outcome: "تسوية",
+    closedAt: "2026-04-28",
+    duration: "5 أشهر",
+  },
+  {
+    id: "a3",
+    no: "ق-2023-0451",
+    type: "فصل تعسفي",
+    court: "المحكمة العمالية بجدة",
+    outcome: "لصالحنا",
+    closedAt: "2026-04-03",
+    duration: "11 شهر",
+  },
+  {
+    id: "a4",
+    no: "ق-2023-0388",
+    type: "حضانة ونفقة",
+    court: "محكمة الأحوال الشخصية بالرياض",
+    outcome: "ضدنا",
+    closedAt: "2026-03-19",
+    duration: "14 شهر",
+  },
+  {
+    id: "a5",
+    no: "ق-2024-0021",
+    type: "اعتراض إداري",
+    court: "المحكمة الإدارية بالدمام",
+    outcome: "لصالحنا",
+    closedAt: "2026-02-26",
+    duration: "7 أشهر",
+  },
+  {
+    id: "a6",
+    no: "ق-2023-0274",
+    type: "نزاع عقاري",
+    court: "المحكمة العامة بالرياض",
+    outcome: "تسوية",
+    closedAt: "2026-01-30",
+    duration: "13 شهر",
+  },
+  {
+    id: "a7",
+    no: "ق-2023-0159",
+    type: "شيك بدون رصيد",
+    court: "المحكمة الجزائية بالرياض",
+    outcome: "لصالحنا",
+    closedAt: "2025-12-14",
+    duration: "6 أشهر",
+  },
+  {
+    id: "a8",
+    no: "ق-2022-0502",
+    type: "إخلاء عقار",
+    court: "محكمة التنفيذ بمكة المكرمة",
+    outcome: "ضدنا",
+    closedAt: "2025-11-08",
+    duration: "10 أشهر",
+  },
+];
+
+const OUTCOME_COLOR: Record<Outcome, string> = {
+  "لصالحنا": "var(--success)",
+  "ضدنا": "var(--danger)",
+  "تسوية": "var(--warn)",
+};
+
+const FILTERS = ["الكل", "مكسوبة", "خاسرة", "تسوية"];
+
+export default async function CasesArchivePage({
+  params,
+}: {
+  params: Promise<{ tenant: string }>;
+}) {
+  await params;
+
+  const total = ARCHIVED_CASES.length;
+  const won = ARCHIVED_CASES.filter((c) => c.outcome === "لصالحنا").length;
+  const settled = ARCHIVED_CASES.filter((c) => c.outcome === "تسوية").length;
+  // الكسب = لصالحنا + التسويات (تُحتسب نتيجة إيجابية للمكتب)
+  const winRate = Math.round(((won + settled) / total) * 100);
+
+  return (
+    <>
+      <Topbar
+        title="أرشيف القضايا"
+        sub="القضايا المغلقة والمؤرشفة"
+        breadcrumb={["الرئيسية", "القضايا", "الأرشيف"]}
+      />
+      <main className="p-4 sm:p-6 max-w-7xl w-full">
+        <PageHeader
+          title="أرشيف القضايا"
+          sub={`${total} قضية مغلقة — سجل المكتب الكامل`}
+          actions={
+            <button className="btn btn-ghost text-sm py-2.5">↧ تصدير الأرشيف</button>
+          }
+        />
+
+        {/* Stat row */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+          <StatCard
+            label="إجمالي مؤرشفة"
+            value={total}
+            icon="🗄"
+            accent="info"
+            hint="قضايا مغلقة بالكامل"
+          />
+          <StatCard
+            label="نسبة الكسب"
+            value={`${winRate}%`}
+            icon="⚖"
+            accent="success"
+            trend={{ v: "+6%", up: true }}
+            hint="لصالحنا + التسويات"
+          />
+          <StatCard
+            label="قضايا مكسوبة"
+            value={won}
+            icon="🏆"
+            accent="brand"
+            hint="حُسمت لصالح المكتب"
+          />
+          <StatCard
+            label="تسويات ودّية"
+            value={settled}
+            icon="🤝"
+            accent="warn"
+            hint="صلح خارج المرافعة"
+          />
+        </div>
+
+        {/* Filter pills + search */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
+          <div className="flex flex-wrap gap-2">
+            {FILTERS.map((f, i) => (
+              <button
+                key={f}
+                className={`px-3 py-1.5 rounded-full text-xs border whitespace-nowrap ${
+                  i === 0
+                    ? "bg-[var(--brand)]/10 border-[var(--brand)] text-[var(--brand)]"
+                    : "border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)]"
+                }`}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+          <div className="relative sm:ms-auto sm:w-64">
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)] text-sm">
+              🔍
+            </span>
+            <input
+              type="text"
+              placeholder="ابحث برقم القضية أو المحكمة..."
+              className="w-full ps-9 pe-3 py-2 text-sm rounded-lg bg-[var(--bg-card)] border border-[var(--border)] outline-none focus:border-[var(--brand)] transition-colors"
+            />
+          </div>
+        </div>
+
+        {/* Archive table — horizontally scrollable on mobile */}
+        <div className="card !p-0 overflow-x-auto">
+          <table className="w-full min-w-[700px] text-sm">
+            <thead>
+              <tr className="bg-[var(--bg-hover)] border-b border-[var(--border)] text-[10px] font-mono uppercase tracking-widest text-[var(--text-faint)]">
+                <th className="text-start font-medium px-4 py-2.5">رقم القضية</th>
+                <th className="text-start font-medium px-4 py-2.5">النوع</th>
+                <th className="text-start font-medium px-4 py-2.5">المحكمة</th>
+                <th className="text-start font-medium px-4 py-2.5">النتيجة</th>
+                <th className="text-start font-medium px-4 py-2.5">تاريخ الإغلاق</th>
+                <th className="text-start font-medium px-4 py-2.5">المدة</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--border)]">
+              {ARCHIVED_CASES.map((c) => (
+                <tr
+                  key={c.id}
+                  className="hover:bg-[var(--bg-hover)] transition-colors cursor-pointer"
+                >
+                  <td className="px-4 py-3">
+                    <span className="num font-bold text-[var(--text)]" dir="ltr">
+                      {c.no}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-[var(--text-muted)] whitespace-nowrap">
+                    {c.type}
+                  </td>
+                  <td className="px-4 py-3 text-[var(--text-muted)]">
+                    <span className="truncate block max-w-[220px]">{c.court}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full whitespace-nowrap"
+                      style={{
+                        background: `color-mix(in srgb, ${OUTCOME_COLOR[c.outcome]} 15%, transparent)`,
+                        color: OUTCOME_COLOR[c.outcome],
+                      }}
+                    >
+                      ● {c.outcome}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="num text-[var(--text-muted)]" dir="ltr">
+                      {c.closedAt}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-[var(--text-muted)] whitespace-nowrap">
+                    {c.duration}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <p className="text-[11px] text-[var(--text-faint)] mt-3">
+          {/* القضايا المؤرشفة للقراءة فقط — لإعادة فتح قضية تواصل مع مدير المكتب. */}
+          الأرشيف للقراءة فقط — تُعرض آخر {total} قضايا مغلقة.
+        </p>
+      </main>
+    </>
+  );
+}

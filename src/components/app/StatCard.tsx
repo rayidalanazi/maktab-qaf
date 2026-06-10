@@ -24,13 +24,13 @@ export function StatCard({ label, value, icon, hint, trend, accent = "brand" }: 
         style={{ background: color }}
       />
       <div className="relative flex items-start justify-between gap-2 mb-2">
-        <div className="text-[11px] text-[var(--text-muted)] uppercase tracking-wider">
+        <div className="text-[11px] text-[var(--text-muted)] leading-tight min-w-0">
           {label}
         </div>
-        {icon && <div className="text-xl opacity-70">{icon}</div>}
+        {icon && <div className="text-lg sm:text-xl opacity-70 shrink-0">{icon}</div>}
       </div>
-      <div className="relative flex items-baseline gap-2 mb-1">
-        <span className="font-display font-black text-3xl num" style={{ color }}>
+      <div className="relative flex items-baseline gap-1.5 mb-1 flex-wrap">
+        <span className="font-display font-black text-2xl sm:text-3xl num leading-none" style={{ color }}>
           {value}
         </span>
         {trend && (
@@ -43,7 +43,7 @@ export function StatCard({ label, value, icon, hint, trend, accent = "brand" }: 
         )}
       </div>
       {hint && (
-        <div className="relative text-[11px] text-[var(--text-faint)]">{hint}</div>
+        <div className="relative text-[11px] text-[var(--text-faint)] leading-tight">{hint}</div>
       )}
     </div>
   );

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { QafWordmark } from "@/components/landing/QafLogo";
+import { ThemeProvider } from "@/components/theme/ThemeProvider";
 
 const ADMIN_NAV = [
   { href: "/admin", label: "نظرة عامة", icon: "📊", exact: true },
@@ -12,7 +13,8 @@ const ADMIN_NAV = [
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="grid lg:grid-cols-[240px_1fr] min-h-screen" dir="rtl">
+    <ThemeProvider>
+    <div className="grid lg:grid-cols-[240px_1fr] min-h-screen bg-[var(--bg)] text-[var(--text)]" dir="rtl">
       <aside className="lg:sticky top-0 lg:h-screen bg-[var(--bg-elev)] border-l border-[var(--border)] flex flex-col">
         <div className="p-4 border-b border-[var(--border)]">
           <Link href="/admin" className="flex items-center gap-2">
@@ -48,5 +50,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       <div className="min-w-0 flex flex-col">{children}</div>
     </div>
+    </ThemeProvider>
   );
 }

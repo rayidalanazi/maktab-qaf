@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Cairo, Tajawal, Inter, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { THEME_INIT_SCRIPT } from "@/lib/theme";
 
 const cairo = Cairo({
   variable: "--font-cairo",
@@ -61,6 +62,10 @@ export default function RootLayout({
       className={`${cairo.variable} ${tajawal.variable} ${inter.variable} ${geistMono.variable}`}
       data-scroll-behavior="smooth"
     >
+      <head>
+        {/* Set mode/theme before first paint to avoid a flash of default theme */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body className="min-h-screen bg-bg text-text antialiased">
         {children}
       </body>

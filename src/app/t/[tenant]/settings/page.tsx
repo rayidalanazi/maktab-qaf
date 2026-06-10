@@ -1,5 +1,6 @@
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
+import { ThemePickerPanel } from "@/components/theme/ThemeSwitcher";
 
 type SettingItem = {
   k: string;
@@ -53,6 +54,17 @@ export default async function SettingsPage({ params }: { params: Promise<{ tenan
         />
 
         <div className="space-y-5">
+          {/* Appearance — theme + mode picker */}
+          <div className="card">
+            <h3 className="font-bold mb-1 flex items-center gap-2">
+              🎨 المظهر
+            </h3>
+            <p className="text-xs text-[var(--text-muted)] mb-4">
+              اختر الوضع واللون اللي يريّح عينك — يُحفظ تلقائياً على جهازك.
+            </p>
+            <ThemePickerPanel />
+          </div>
+
           {sections.map((sec, i) => (
             <div key={i} className="card">
               <h3 className="font-bold mb-4 flex items-center gap-2">
