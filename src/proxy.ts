@@ -75,12 +75,14 @@ export function proxy(req: NextRequest) {
       }
       // www / api / etc → marketing pages, no tenant
     } else {
-      // Tenant subdomain — inject the slug for downstream code
+      // Tenant subdomain — inject slug + internally rewrite raed.qaf.sa/dashboard
+      // into /t/raed/dashboard so we can group all tenant pages under app/t/[tenant]/.
+      // The URL bar still shows raed.qaf.sa/dashboard.
       requestHeaders.set("x-tenant-slug", sub);
-
-      // Optionally rewrite tenant URLs into /app/* so we can group tenant pages
-      // in `app/(tenant)/*` later without subdomain handling on every page.
-      // Currently the App Router pages are at the root; we just pass the header.
+      if (!url.pathname.startsWith(`/t/${sub}`) && !url.pathname.startsWith("/_next")) {
+        url.pathname = `/t/${sub}${url.pathname === "/" ? "" : url.pathname}`;
+        return NextResponse.rewrite(url, { request: { headers: requestHeaders } });
+      }
     }
   }
 
