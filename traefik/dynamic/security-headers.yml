@@ -1,0 +1,31 @@
+# Traefik dynamic configuration — security headers applied to qaf router.
+# Reloaded automatically by Traefik file provider on change.
+
+http:
+  middlewares:
+    security-headers:
+      headers:
+        # Force HTTPS
+        sslRedirect: true
+        forceSTSHeader: true
+        stsSeconds: 63072000              # 2 years
+        stsIncludeSubdomains: true
+        stsPreload: true
+
+        # MIME type sniffing protection
+        contentTypeNosniff: true
+
+        # Clickjacking protection (allow same-origin frames so the app can iframe itself)
+        frameDeny: false
+        customFrameOptionsValue: "SAMEORIGIN"
+
+        # Referrer
+        referrerPolicy: "strict-origin-when-cross-origin"
+
+        # Permissions Policy — disable risky APIs by default
+        permissionsPolicy: "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+
+        # Hide server identification
+        customResponseHeaders:
+          Server: ""
+          X-Powered-By: ""

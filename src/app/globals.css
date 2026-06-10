@@ -1,0 +1,323 @@
+@import "tailwindcss";
+
+/* ============================================================
+   قاف Design System
+   ------------------------------------------------------------
+   Mood: edgy, tech, unapologetic. Saudi tech with attitude.
+   Base: rich black + electric lime + hot pink accents.
+   ============================================================ */
+
+:root {
+  /* Neutrals (dark-first) */
+  --bg: #0A0A0A;
+  --bg-elev: #131313;
+  --bg-card: #161616;
+  --bg-hover: #1F1F1F;
+  --border: #262626;
+  --border-strong: #3A3A3A;
+
+  /* Text */
+  --text: #F5F5F5;
+  --text-muted: #A1A1A1;
+  --text-faint: #6B6B6B;
+
+  /* Brand — electric lime (the "قاف" pop) */
+  --brand: #D6FF3D;
+  --brand-soft: #B8E62E;
+  --brand-deep: #8FB322;
+  --brand-glow: rgba(214, 255, 61, 0.35);
+
+  /* Accent — hot pink (sarcasm/danger) */
+  --accent: #FF4D8F;
+  --accent-soft: #FF7AAB;
+  --accent-glow: rgba(255, 77, 143, 0.3);
+
+  /* Semantic */
+  --success: #4ADE80;
+  --warn:    #FBBF24;
+  --danger:  #F87171;
+  --info:    #60A5FA;
+}
+
+/* Light theme override (for tenant apps later, not landing) */
+[data-theme="light"] {
+  --bg: #FAFAFA;
+  --bg-elev: #FFFFFF;
+  --bg-card: #FFFFFF;
+  --bg-hover: #F0F0F0;
+  --border: #E5E5E5;
+  --border-strong: #C0C0C0;
+  --text: #0A0A0A;
+  --text-muted: #525252;
+  --text-faint: #A1A1A1;
+  --brand: #7DB320;
+  --brand-soft: #5C8C18;
+  --brand-deep: #3D5F0E;
+}
+
+@theme inline {
+  /* Map CSS vars → Tailwind tokens */
+  --color-bg: var(--bg);
+  --color-bg-elev: var(--bg-elev);
+  --color-bg-card: var(--bg-card);
+  --color-bg-hover: var(--bg-hover);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-text-faint: var(--text-faint);
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-deep: var(--brand-deep);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-success: var(--success);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+
+  /* Fonts */
+  --font-sans: var(--font-cairo), var(--font-inter), system-ui, sans-serif;
+  --font-display: var(--font-tajawal), var(--font-cairo), system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* Radii */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+
+  /* Shadows */
+  --shadow-glow: 0 0 40px var(--brand-glow);
+  --shadow-glow-pink: 0 0 40px var(--accent-glow);
+}
+
+/* ============================================================
+   Base
+   ============================================================ */
+* { box-sizing: border-box; }
+
+html {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Selection — sarcasm vibe */
+::selection {
+  background: var(--brand);
+  color: #000;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+
+/* Focus rings — branded */
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ============================================================
+   Typography helpers
+   ============================================================ */
+.font-display { font-family: var(--font-display); }
+.font-mono    { font-family: var(--font-mono); }
+
+/* Numbers should always be tabular-nums LTR */
+.num { font-variant-numeric: tabular-nums; direction: ltr; display: inline-block; }
+
+/* ============================================================
+   Animations
+   ============================================================ */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 var(--brand-glow); }
+  50%      { box-shadow: 0 0 40px 10px var(--brand-glow); }
+}
+
+@keyframes float-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes scroll-x {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+@keyframes gradient-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+
+.animate-pulse-glow { animation: pulse-glow 3s ease-in-out infinite; }
+.animate-float-up   { animation: float-up 0.8s ease-out both; }
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent, var(--brand-glow), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
+}
+.animate-scroll-x { animation: scroll-x 30s linear infinite; }
+
+/* Stagger helpers */
+.delay-100 { animation-delay: 0.1s; }
+.delay-200 { animation-delay: 0.2s; }
+.delay-300 { animation-delay: 0.3s; }
+.delay-400 { animation-delay: 0.4s; }
+.delay-500 { animation-delay: 0.5s; }
+
+/* ============================================================
+   Component primitives (used everywhere)
+   ============================================================ */
+
+/* Big brand text — uses gradient for hero headlines */
+.text-gradient-brand {
+  background: linear-gradient(135deg, var(--brand) 0%, var(--brand-soft) 50%, var(--accent) 100%);
+  background-size: 200% 200%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: gradient-shift 6s ease infinite;
+}
+
+/* Noise overlay for "tech" feel */
+.bg-noise::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+}
+
+/* Grid background pattern */
+.bg-grid {
+  background-image:
+    linear-gradient(to right, var(--border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at center, black 0%, transparent 70%);
+  -webkit-mask-image: radial-gradient(ellipse at center, black 0%, transparent 70%);
+}
+
+/* Glow blobs (for hero) */
+.blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+/* Reusable button */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 22px;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 15px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  border: 0;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.btn-brand {
+  background: var(--brand);
+  color: #0A0A0A;
+  font-weight: 700;
+}
+.btn-brand:hover {
+  background: var(--brand-soft);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-glow);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+}
+.btn-ghost:hover {
+  background: var(--bg-hover);
+  border-color: var(--brand);
+}
+
+.btn-outline-brand {
+  background: transparent;
+  color: var(--brand);
+  border: 1px solid var(--brand);
+}
+.btn-outline-brand:hover {
+  background: var(--brand);
+  color: #0A0A0A;
+}
+
+/* Reusable card */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  transition: all 0.2s;
+}
+.card:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-2px);
+}
+
+/* Pill / tag */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.pill-brand {
+  background: rgba(214, 255, 61, 0.1);
+  border-color: rgba(214, 255, 61, 0.3);
+  color: var(--brand);
+}
+
+/* ============================================================
+   RTL fine-tuning
+   ============================================================ */
+[dir="rtl"] .arrow-flip { transform: scaleX(-1); }
+
+/* Numbers and code stay LTR even in RTL context */
+code, kbd, .num, .tabular-nums {
+  direction: ltr;
+  unicode-bidi: embed;
+}

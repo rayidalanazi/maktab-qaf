@@ -1,0 +1,134 @@
+# =============================================================================
+# قاف — Production docker-compose for OVH VPS
+# =============================================================================
+# Stack:
+#   - traefik   : reverse proxy + automatic Let's Encrypt SSL (incl. wildcard)
+#   - qaf       : the Next.js app (standalone server)
+#   - watchtower: optional auto-update on new image push (commented out)
+#
+# Requirements on the host:
+#   - Docker + Docker Compose v2
+#   - Ports 80 + 443 open
+#   - A wildcard DNS record:  *.qaf.sa → VPS IP   (for tenant subdomains)
+#   - DNS provider API token for wildcard SSL (Cloudflare/OVH/etc)
+#
+# Usage:
+#   1. Copy .env.example → .env  and fill in real values
+#   2. docker compose up -d --build
+#   3. Logs:    docker compose logs -f qaf
+#   4. Update:  git pull && docker compose up -d --build
+# =============================================================================
+
+services:
+  # ─── Traefik: reverse proxy + automatic SSL ─────────────────────────────────
+  traefik:
+    image: traefik:v3.2
+    container_name: qaf-traefik
+    restart: unless-stopped
+    command:
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.file.directory=/etc/traefik/dynamic"
+      - "--providers.file.watch=true"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      # Force redirect HTTP → HTTPS
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.web.http.redirections.entrypoint.permanent=true"
+      # ACME / Let's Encrypt — wildcard via DNS challenge
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.dnschallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.dnschallenge.provider=${DNS_PROVIDER:-cloudflare}"
+      # Logs
+      - "--log.level=INFO"
+      - "--accesslog=true"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/letsencrypt:/letsencrypt
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+    environment:
+      # DNS-challenge provider credentials (used for wildcard SSL).
+      # Cloudflare example: set CF_DNS_API_TOKEN in .env
+      - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN:-}
+      - OVH_ENDPOINT=${OVH_ENDPOINT:-}
+      - OVH_APPLICATION_KEY=${OVH_APPLICATION_KEY:-}
+      - OVH_APPLICATION_SECRET=${OVH_APPLICATION_SECRET:-}
+      - OVH_CONSUMER_KEY=${OVH_CONSUMER_KEY:-}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.tls=true"
+      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+      # Basic auth on the dashboard — set TRAEFIK_DASHBOARD_AUTH in .env
+      - "traefik.http.routers.dashboard.middlewares=dashboard-auth"
+      - "traefik.http.middlewares.dashboard-auth.basicauth.users=${TRAEFIK_DASHBOARD_AUTH}"
+    networks:
+      - qaf-net
+
+  # ─── قاف Next.js app ──────────────────────────────────────────────────────
+  qaf:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: qaf:latest
+    container_name: qaf-app
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - MOYASAR_PUBLIC_KEY=${MOYASAR_PUBLIC_KEY}
+      - MOYASAR_SECRET_KEY=${MOYASAR_SECRET_KEY}
+      - MOYASAR_WEBHOOK_SECRET=${MOYASAR_WEBHOOK_SECRET}
+      - BASE_DOMAIN=${BASE_DOMAIN}
+      - NEXT_PUBLIC_BASE_DOMAIN=${BASE_DOMAIN}
+    labels:
+      - "traefik.enable=true"
+      # Main domain + all subdomains (multi-tenant)
+      - "traefik.http.routers.qaf.rule=Host(`${BASE_DOMAIN}`) || Host(`www.${BASE_DOMAIN}`) || HostRegexp(`{tenant:[a-z0-9-]+}.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.qaf.entrypoints=websecure"
+      - "traefik.http.routers.qaf.tls=true"
+      - "traefik.http.routers.qaf.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.qaf.tls.domains[0].main=${BASE_DOMAIN}"
+      - "traefik.http.routers.qaf.tls.domains[0].sans=*.${BASE_DOMAIN}"
+      - "traefik.http.services.qaf.loadbalancer.server.port=3000"
+      # Rate limiting (basic DOS protection)
+      - "traefik.http.routers.qaf.middlewares=qaf-ratelimit"
+      - "traefik.http.middlewares.qaf-ratelimit.ratelimit.average=100"
+      - "traefik.http.middlewares.qaf-ratelimit.ratelimit.burst=200"
+    networks:
+      - qaf-net
+    depends_on:
+      - traefik
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ─── Watchtower: auto-update on new image (optional) ──────────────────────
+  # Uncomment to enable. Requires you to push new images to a registry.
+  # watchtower:
+  #   image: containrrr/watchtower
+  #   container_name: qaf-watchtower
+  #   restart: unless-stopped
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   command: --interval 3600 --cleanup qaf-app
+  #   networks:
+  #     - qaf-net
+
+networks:
+  qaf-net:
+    driver: bridge
+    name: qaf-net
