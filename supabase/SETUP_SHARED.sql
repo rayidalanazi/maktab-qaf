@@ -249,6 +249,10 @@ create index if not exists idx_qaf_expenses_tenant on public.qaf_expenses (tenan
 -- =============================================================================
 -- HELPER FUNCTIONS (no JWT hook needed — read tenant/role from qaf_users)
 -- =============================================================================
+-- ⚠ MUST REMAIN `stable`: the qaf_users self-update RLS policy pins role/tenant by
+-- comparing the NEW row against these functions, which return the PRE-update value
+-- ONLY because STABLE re-queries under the statement-start snapshot. Switching to
+-- VOLATILE would let a user escalate their own role/tenant. Do not change.
 create or replace function public.qaf_current_tenant() returns uuid
 language sql stable security definer set search_path = public as $$
   select tenant_id from public.qaf_users where id = auth.uid();
@@ -305,11 +309,20 @@ begin
   foreach t in array array[
     'qaf_tenants','qaf_payments','qaf_grants','qaf_users','qaf_cases','qaf_clients',
     'qaf_documents','qaf_memos','qaf_schedule_events','qaf_tasks','qaf_notifications',
-    'qaf_invoices','qaf_expenses'
+    'qaf_invoices','qaf_expenses','qaf_platform_admins'
   ] loop
     execute format('alter table public.%I enable row level security;', t);
   end loop;
 end $$;
+
+-- Platform admins: membership = cross-tenant super power, so it must NEVER be
+-- self-writable. RLS on (above) + read-only self policy + revoke writes. Rows are
+-- added only via the service_role key (bypasses RLS).
+revoke all on public.qaf_platform_admins from anon, authenticated;
+grant select on public.qaf_platform_admins to authenticated;
+drop policy if exists qaf_platform_admins_self on public.qaf_platform_admins;
+create policy qaf_platform_admins_self on public.qaf_platform_admins for select to authenticated
+  using (user_id = auth.uid());
 
 -- Tenants: a user sees their own tenant; platform admin sees all.
 drop policy if exists qaf_tenants_select on public.qaf_tenants;
@@ -325,17 +338,34 @@ drop policy if exists qaf_users_select on public.qaf_users;
 create policy qaf_users_select on public.qaf_users for select to authenticated
   using (tenant_id = public.qaf_current_tenant() or id = auth.uid() or public.qaf_is_platform_admin());
 
+-- Self-update: a user edits ONLY their own profile and CANNOT change their own
+-- role or tenant_id. The WITH CHECK pins both to their current (pre-update,
+-- STABLE-snapshot) values — blocking self-privilege-escalation and the
+-- cross-tenant jump (set tenant_id = another firm).
 drop policy if exists qaf_users_self_update on public.qaf_users;
 create policy qaf_users_self_update on public.qaf_users for update to authenticated
-  using (id = auth.uid() or (tenant_id = public.qaf_current_tenant() and public.qaf_current_role() in ('admin','general_manager')));
+  using (id = auth.uid())
+  with check (
+    id = auth.uid()
+    and tenant_id is not distinct from public.qaf_current_tenant()
+    and role::text = public.qaf_current_role()
+  );
+
+-- Admin/GM may manage users WITHIN their own tenant only (cannot move a user out).
+drop policy if exists qaf_users_admin_update on public.qaf_users;
+create policy qaf_users_admin_update on public.qaf_users for update to authenticated
+  using (tenant_id = public.qaf_current_tenant() and public.qaf_current_role() in ('admin','general_manager'))
+  with check (tenant_id = public.qaf_current_tenant() and public.qaf_current_role() in ('admin','general_manager'));
 
 -- Generic tenant-scoped policies (select/insert/update/delete) for data tables.
+-- NOTE: qaf_notifications is intentionally EXCLUDED — it has a dedicated
+-- per-recipient policy below so users can't read each other's notifications.
 do $$
 declare t text;
 begin
   foreach t in array array[
     'qaf_cases','qaf_clients','qaf_documents','qaf_memos','qaf_schedule_events',
-    'qaf_tasks','qaf_notifications','qaf_invoices','qaf_expenses','qaf_payments','qaf_grants'
+    'qaf_tasks','qaf_invoices','qaf_expenses','qaf_payments','qaf_grants'
   ] loop
     execute format('drop policy if exists %I on public.%I;', t||'_all', t);
     execute format(
@@ -343,6 +373,33 @@ begin
       t||'_all', t);
   end loop;
 end $$;
+
+-- Notifications: same tenant AND (mine OR firm-wide broadcast OR I'm admin/GM).
+-- Closes the intra-tenant leak where any member could read others' notifications.
+drop policy if exists qaf_notifications_all on public.qaf_notifications;
+drop policy if exists qaf_notifications_rw on public.qaf_notifications;
+create policy qaf_notifications_rw on public.qaf_notifications for all to authenticated
+  using (
+    public.qaf_is_platform_admin()
+    or (
+      tenant_id = public.qaf_current_tenant()
+      and (
+        target_user_id = auth.uid()
+        or target_user_id is null
+        or public.qaf_current_role() in ('admin','general_manager')
+      )
+    )
+  )
+  with check (
+    public.qaf_is_platform_admin()
+    or (
+      tenant_id = public.qaf_current_tenant()
+      and (
+        public.qaf_current_role() in ('admin','general_manager')
+        or target_user_id = auth.uid()
+      )
+    )
+  );
 
 -- =============================================================================
 -- DONE. Next: send me Project URL + anon key (service_role optional for admin/seed).
