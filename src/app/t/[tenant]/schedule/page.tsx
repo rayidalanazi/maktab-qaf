@@ -1,6 +1,7 @@
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { MOCK_EVENTS } from "@/data/app-mock";
+import { formatHijri } from "@/lib/hijri";
 
 const TYPE_COLOR: Record<string, string> = {
   "جلسة": "var(--brand)",
@@ -33,11 +34,16 @@ export default async function SchedulePage({ params }: { params: Promise<{ tenan
           {Object.entries(byDate).sort().map(([date, events]) => (
             <div key={date}>
               <div className="flex items-center gap-3 mb-2">
-                <div className="font-mono text-xs text-[var(--text-faint)]" dir="ltr">
-                  {date}
+                <div className="leading-tight">
+                  <div className="text-xs font-semibold text-[var(--text-muted)]">
+                    {formatHijri(date, { withEra: true })}
+                  </div>
+                  <div className="font-mono text-[10px] text-[var(--text-faint)]" dir="ltr">
+                    {date}
+                  </div>
                 </div>
                 <div className="flex-1 h-px bg-[var(--border)]" />
-                <div className="text-[10px] text-[var(--text-faint)]">
+                <div className="text-[10px] text-[var(--text-faint)] shrink-0">
                   {events.length} موعد
                 </div>
               </div>

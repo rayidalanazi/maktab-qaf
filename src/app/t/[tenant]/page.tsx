@@ -2,6 +2,7 @@ import { Topbar } from "@/components/app/Topbar";
 import { StatCard } from "@/components/app/StatCard";
 import { PageHeader } from "@/components/app/PageHeader";
 import { MOCK_CASES, MOCK_TASKS, MOCK_EVENTS, MOCK_NOTIFICATIONS } from "@/data/app-mock";
+import { formatHijriShort } from "@/lib/hijri";
 
 export default async function TenantDashboardPage({ params }: { params: Promise<{ tenant: string }> }) {
   await params;
@@ -53,7 +54,8 @@ export default async function TenantDashboardPage({ params }: { params: Promise<
                     </div>
                   </div>
                   <div className="text-left shrink-0">
-                    <div className="text-[10px] text-[var(--text-faint)]">{c.deadline}</div>
+                    <div className="text-[10px] text-[var(--text-faint)]">{formatHijriShort(c.deadline)} هـ</div>
+                    <div className="text-[9px] text-[var(--text-faint)] num" dir="ltr">{c.deadline}</div>
                     <div className="text-[10px] text-[var(--accent)]">{c.action}</div>
                   </div>
                 </div>

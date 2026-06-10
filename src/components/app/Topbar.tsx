@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ThemeSwitcher } from "@/components/theme/ThemeSwitcher";
+import { HijriToday } from "@/components/app/HijriDate";
 
 interface TopbarProps {
   title: string;
@@ -42,6 +43,8 @@ export function Topbar({ title, sub, breadcrumb }: TopbarProps) {
             className="w-72 ps-9 pe-3 py-2 text-sm rounded-lg bg-[var(--bg-card)] border border-[var(--border)] outline-none focus:border-[var(--brand)] transition-colors"
           />
         </div>
+
+        <HijriToday />
 
         <ThemeSwitcher />
 
