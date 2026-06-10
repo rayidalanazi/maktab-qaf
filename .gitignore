@@ -45,3 +45,6 @@ next-env.d.ts
 
 # windows helpers (local dev)
 dev.bat
+
+# local static-export reproduction scratch
+/_served
