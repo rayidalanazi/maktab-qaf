@@ -86,6 +86,9 @@ export function Hero() {
         <div className="relative mt-20 animate-float-up delay-500">
           <div className="absolute inset-x-0 -top-10 h-40 bg-gradient-to-b from-[var(--brand)]/10 to-transparent blur-3xl pointer-events-none" />
           <DashboardMock />
+          <div className="sm:hidden text-center text-[10px] text-[var(--text-faint)] font-mono mt-3">
+            👈 اسحب يمين / يسار لاستعراض اللوحة كاملة
+          </div>
         </div>
       </div>
     </section>
@@ -109,8 +112,9 @@ function DashboardMock() {
         </div>
       </div>
 
-      {/* Body */}
-      <div className="grid grid-cols-[200px_1fr] min-h-[420px]">
+      {/* Body — scrolls horizontally on mobile so the wide desktop layout isn't cropped */}
+      <div className="overflow-x-auto">
+        <div className="grid grid-cols-[200px_1fr] min-w-[600px] min-h-[420px]">
         {/* Sidebar */}
         <aside className="border-l border-[var(--border)] p-3 bg-[var(--bg)]/30">
           <div className="flex items-center gap-2 mb-5 px-2">
@@ -222,6 +226,7 @@ function DashboardMock() {
               </div>
             ))}
           </div>
+        </div>
         </div>
       </div>
     </div>
