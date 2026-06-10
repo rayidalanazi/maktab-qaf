@@ -1,10 +1,19 @@
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 
+type SettingItem = {
+  k: string;
+  v: string;
+  ltr?: boolean;
+  brand?: boolean;
+  success?: boolean;
+  muted?: boolean;
+};
+
 export default async function SettingsPage({ params }: { params: Promise<{ tenant: string }> }) {
   const { tenant } = await params;
 
-  const sections = [
+  const sections: { title: string; items: SettingItem[] }[] = [
     {
       title: "معلومات المكتب",
       items: [
