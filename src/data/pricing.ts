@@ -47,19 +47,19 @@ export const ADDONS: Addon[] = [
 
   // ─── Legal reference ───
   { key: "memos_module", category: "legal_reference", name_ar: "صياغة المذكرات",
-    description_ar: "محرّر مذكرات + قوالب جاهزة + توقيع إلكتروني + workflow اعتماد.",
+    description_ar: "محرّر مذكرات + قوالب جاهزة + توقيع اعتماد داخلي + workflow اعتماد متعدد المراحل.",
     price_monthly_sar: 49,
     snark_ar: "// مذكرة جاهزة قبل ما تخلّص قهوتك.",
     unlocks_pages: ["memos"],
     requires: [] },
   { key: "templates_library", category: "legal_reference", name_ar: "مكتبة النماذج والعقود",
-    description_ar: "200+ نموذج قانوني وعقد قابل للتخصيص بضغطة.",
+    description_ar: "مكتبة نماذج قانونية وعقود تتوسّع باستمرار، قابلة للتخصيص — للاسترشاد، يراجعها محامٍ.",
     price_monthly_sar: 39,
     snark_ar: "نسخ + لصق. بس بشكل قانوني.",
     unlocks_pages: ["templates"],
     requires: [] },
   { key: "precedents_engine", category: "legal_reference", name_ar: "محرّك السوابق القضائية",
-    description_ar: "بحث ذكي في الأحكام والسوابق السعودية والخليجية بروابط مرجعية.",
+    description_ar: "بحث في مدوّنة الأحكام المنشورة من وزارة العدل وأنظمة المملكة. (توسعة التغطية قريباً)",
     price_monthly_sar: 79,
     snark_ar: "// لأن «أعتقد إن في حكم مشابه» ما هي حجة.",
     unlocks_pages: ["precedents"],
@@ -71,7 +71,7 @@ export const ADDONS: Addon[] = [
     unlocks_pages: ["opponents"],
     requires: [] },
   { key: "regulations_hub", category: "legal_reference", name_ar: "مركز الأنظمة واللوائح",
-    description_ar: "أنظمة المملكة محدّثة آلياً مع تنبيهات للتعديلات الجديدة.",
+    description_ar: "أنظمة المملكة مع متابعة شبه آلية وتحقق بشري وتنبيهات بالتعديلات الجديدة.",
     price_monthly_sar: 59,
     snark_ar: "ابسطر من فتح موقع البوابة كل أسبوع.",
     unlocks_pages: ["regulations"],
@@ -119,7 +119,7 @@ export const ADDONS: Addon[] = [
 
   // ─── Finance ───
   { key: "invoicing_pro", category: "finance", name_ar: "الفوترة الإلكترونية (زاتكا)",
-    description_ar: "فواتير متوافقة مع متطلبات هيئة الزكاة والضريبة — المرحلة الثانية.",
+    description_ar: "إصدار فواتير ضريبية + احتساب ضريبة القيمة المضافة 15% آلياً. (التكامل المعتمد مع فاتورة/زاتكا — قيد الاعتماد، مستهدف قبل موجة 2026)",
     price_monthly_sar: 79,
     snark_ar: "// زاتكا ما تمزح. ولا قاف يمزح.",
     unlocks_pages: ["invoices"],
@@ -163,7 +163,7 @@ export const ADDONS: Addon[] = [
     unlocks_pages: ["executive"],
     requires: ["kpi_dashboard"] },
   { key: "regulatory_radar", category: "intelligence", name_ar: "رادار التغييرات التنظيمية",
-    description_ar: "تنبيهات فورية لأي تعديل نظامي يخصّ ممارسات مكتبك مع تحليل أثر.",
+    description_ar: "تنبيهات خلال 24-48 ساعة لأي تعديل نظامي يخصّ ممارسات مكتبك، مع مسوّدة أثر استرشادية يراجعها محامٍ.",
     price_monthly_sar: 99,
     snark_ar: "النظام تعدّل الفجر. أنت عرفت 5:45 صباحاً.",
     unlocks_pages: ["regulatory-radar"],
@@ -177,7 +177,7 @@ export const ADDONS: Addon[] = [
 
   // ─── AI (with explicit caps to avoid margin bleed) ───
   { key: "ai_assistant", category: "ai", name_ar: "مساعد قاف الذكي (AI)",
-    description_ar: "مساعد قانوني يصيغ ويلخّص ويبحث ويراجع — حتى 150,000 كلمة/شهر، بعدها 0.05 ر.س للكلمة. يستشهد بمصدر لكل ادعاء.",
+    description_ar: "مساعد يصيغ ويلخّص ويراجع — حتى 150,000 كلمة/شهر، بعدها 0.05 ر.س للكلمة. مساعد لا يُغني عن الرأي القانوني، ويراجعه المحامي. (الاستشهاد المؤرّض على مصادر سعودية قريباً)",
     price_monthly_sar: 129,
     snark_ar: "// المتدرّب اللي ما يطلب إجازة.",
     unlocks_pages: [],
