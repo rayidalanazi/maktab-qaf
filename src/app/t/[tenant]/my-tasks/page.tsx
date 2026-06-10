@@ -1,5 +1,9 @@
+"use client";
+
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
+import { useQafData } from "@/hooks/useQafData";
+import { fetchTasks } from "@/lib/data/queries";
 import { MOCK_TASKS } from "@/data/app-mock";
 
 const PRIORITY_COLOR: Record<string, string> = {
@@ -11,24 +15,25 @@ const PRIORITY_COLOR: Record<string, string> = {
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   "todo": { label: "للتنفيذ", color: "var(--text-muted)" },
   "in-progress": { label: "قيد التنفيذ", color: "var(--brand)" },
+  "in_progress": { label: "قيد التنفيذ", color: "var(--brand)" },
   "done": { label: "تم", color: "var(--success)" },
 };
 
-export default async function MyTasksPage({ params }: { params: Promise<{ tenant: string }> }) {
-  await params;
+export default function MyTasksPage() {
+  const { data: tasks } = useQafData(fetchTasks, MOCK_TASKS);
   return (
     <>
       <Topbar title="مهامي" sub="ما يحتاج إنجازك" breadcrumb={["الرئيسية", "مهامي"]} />
       <main className="p-4 sm:p-6 max-w-5xl w-full">
         <PageHeader
           title="مهامي"
-          sub={`${MOCK_TASKS.filter((t) => t.status !== "done").length} مهمة قيد التنفيذ`}
+          sub={`${tasks.filter((t) => t.status !== "done").length} مهمة قيد التنفيذ`}
           actions={<button className="btn btn-brand text-sm py-2.5">+ مهمة جديدة</button>}
         />
 
         <div className="space-y-2">
-          {MOCK_TASKS.map((t) => {
-            const st = STATUS_LABEL[t.status];
+          {tasks.map((t) => {
+            const st = STATUS_LABEL[t.status] ?? STATUS_LABEL["todo"];
             return (
               <div key={t.id} className="card flex items-start gap-3 hover:border-[var(--brand)]/40 cursor-pointer">
                 <button

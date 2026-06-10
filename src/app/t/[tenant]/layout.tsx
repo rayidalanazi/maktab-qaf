@@ -3,6 +3,7 @@ import { loadTenantBySlug } from "@/lib/tenant";
 import { Sidebar } from "@/components/app/Sidebar";
 import { APP_NAV, filterNav } from "@/data/app-nav";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
+import { SessionProvider } from "@/components/app/SessionProvider";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -32,18 +33,20 @@ export default async function TenantLayout({ children, params }: LayoutProps) {
 
   return (
     <ThemeProvider>
-      <div className="grid lg:grid-cols-[288px_1fr] min-h-screen bg-[var(--bg)] text-[var(--text)]" dir="rtl">
-        <Sidebar
-          tenantName={tenant.name || slug}
-          tenantSlug={slug}
-          userName={currentUser.name}
-          userRole={currentUser.role}
-          userInitials={currentUser.initials}
-          nav={nav}
-          baseHref={baseHref}
-        />
-        <div className="min-w-0 flex flex-col">{children}</div>
-      </div>
+      <SessionProvider>
+        <div className="grid lg:grid-cols-[288px_1fr] min-h-screen bg-[var(--bg)] text-[var(--text)]" dir="rtl">
+          <Sidebar
+            tenantName={tenant.name || slug}
+            tenantSlug={slug}
+            userName={currentUser.name}
+            userRole={currentUser.role}
+            userInitials={currentUser.initials}
+            nav={nav}
+            baseHref={baseHref}
+          />
+          <div className="min-w-0 flex flex-col">{children}</div>
+        </div>
+      </SessionProvider>
     </ThemeProvider>
   );
 }

@@ -1,6 +1,11 @@
+"use client";
+
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
+import { useQafData } from "@/hooks/useQafData";
+import { fetchEvents } from "@/lib/data/queries";
 import { MOCK_EVENTS } from "@/data/app-mock";
+import type { EventItem } from "@/lib/data/types";
 import { formatHijri } from "@/lib/hijri";
 
 const TYPE_COLOR: Record<string, string> = {
@@ -11,11 +16,11 @@ const TYPE_COLOR: Record<string, string> = {
   "تدريب": "var(--success)",
 };
 
-export default async function SchedulePage({ params }: { params: Promise<{ tenant: string }> }) {
-  await params;
+export default function SchedulePage() {
+  const { data: events } = useQafData(fetchEvents, MOCK_EVENTS);
 
   // Group by date
-  const byDate = MOCK_EVENTS.reduce<Record<string, typeof MOCK_EVENTS>>((acc, e) => {
+  const byDate = events.reduce<Record<string, EventItem[]>>((acc, e) => {
     (acc[e.date] = acc[e.date] || []).push(e);
     return acc;
   }, {});
@@ -31,7 +36,7 @@ export default async function SchedulePage({ params }: { params: Promise<{ tenan
         />
 
         <div className="space-y-4">
-          {Object.entries(byDate).sort().map(([date, events]) => (
+          {Object.entries(byDate).sort().map(([date, dayEvents]) => (
             <div key={date}>
               <div className="flex items-center gap-3 mb-2">
                 <div className="leading-tight">
@@ -44,11 +49,11 @@ export default async function SchedulePage({ params }: { params: Promise<{ tenan
                 </div>
                 <div className="flex-1 h-px bg-[var(--border)]" />
                 <div className="text-[10px] text-[var(--text-faint)] shrink-0">
-                  {events.length} موعد
+                  {dayEvents.length} موعد
                 </div>
               </div>
               <div className="space-y-2">
-                {events.map((e) => (
+                {dayEvents.map((e) => (
                   <div
                     key={e.id}
                     className="card flex items-start gap-4 hover:border-[var(--brand)]/40 cursor-pointer"

@@ -1,5 +1,9 @@
+"use client";
+
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
+import { useQafData } from "@/hooks/useQafData";
+import { fetchNotifications } from "@/lib/data/queries";
 import { MOCK_NOTIFICATIONS } from "@/data/app-mock";
 
 const URGENCY_COLOR: Record<string, string> = {
@@ -8,20 +12,20 @@ const URGENCY_COLOR: Record<string, string> = {
   green: "var(--success)",
 };
 
-export default async function NotificationsPage({ params }: { params: Promise<{ tenant: string }> }) {
-  await params;
+export default function NotificationsPage() {
+  const { data: notifications } = useQafData(fetchNotifications, MOCK_NOTIFICATIONS);
   return (
     <>
       <Topbar title="الإشعارات" breadcrumb={["الرئيسية", "الإشعارات"]} />
       <main className="p-4 sm:p-6 max-w-3xl w-full">
         <PageHeader
           title="الإشعارات"
-          sub={`${MOCK_NOTIFICATIONS.filter((n) => n.unread).length} إشعار غير مقروء`}
+          sub={`${notifications.filter((n) => n.unread).length} إشعار غير مقروء`}
           actions={<button className="btn btn-ghost text-sm py-2.5">✓ اعتبر الكل مقروءاً</button>}
         />
 
         <div className="space-y-2">
-          {MOCK_NOTIFICATIONS.map((n) => (
+          {notifications.map((n) => (
             <div
               key={n.id}
               className={`card flex items-start gap-3 cursor-pointer ${

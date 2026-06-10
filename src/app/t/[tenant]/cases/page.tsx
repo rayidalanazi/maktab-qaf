@@ -1,5 +1,9 @@
+"use client";
+
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
+import { useQafData } from "@/hooks/useQafData";
+import { fetchCases } from "@/lib/data/queries";
 import { MOCK_CASES } from "@/data/app-mock";
 
 const STATUS_COLOR: Record<string, string> = {
@@ -8,15 +12,15 @@ const STATUS_COLOR: Record<string, string> = {
   "مغلق": "var(--text-faint)",
 };
 
-export default async function CasesPage({ params }: { params: Promise<{ tenant: string }> }) {
-  await params;
+export default function CasesPage() {
+  const { data: cases } = useQafData(fetchCases, MOCK_CASES);
   return (
     <>
       <Topbar title="القضايا" sub="جميع قضايا المكتب" breadcrumb={["الرئيسية", "القضايا"]} />
       <main className="p-4 sm:p-6 max-w-7xl w-full">
         <PageHeader
           title="القضايا"
-          sub={`${MOCK_CASES.length} قضية`}
+          sub={`${cases.length} قضية`}
           actions={<button className="btn btn-brand text-sm py-2.5">+ قضية جديدة</button>}
         />
 
@@ -46,7 +50,7 @@ export default async function CasesPage({ params }: { params: Promise<{ tenant: 
             <div>الموعد</div>
           </div>
           <div className="divide-y divide-[var(--border)]">
-            {MOCK_CASES.map((c) => (
+            {cases.map((c) => (
               <div
                 key={c.id}
                 className="md:grid md:grid-cols-[1fr_1fr_120px_120px_140px] p-3 sm:p-4 hover:bg-[var(--bg-hover)] transition-colors cursor-pointer"

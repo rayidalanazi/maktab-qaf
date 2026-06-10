@@ -1,16 +1,20 @@
+"use client";
+
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
+import { useQafData } from "@/hooks/useQafData";
+import { fetchUsers } from "@/lib/data/queries";
 import { MOCK_USERS } from "@/data/app-mock";
 
-export default async function UsersPage({ params }: { params: Promise<{ tenant: string }> }) {
-  await params;
+export default function UsersPage() {
+  const { data: users } = useQafData(fetchUsers, MOCK_USERS);
   return (
     <>
       <Topbar title="المستخدمون" sub="فريق المكتب" breadcrumb={["الرئيسية", "المستخدمون"]} />
       <main className="p-4 sm:p-6 max-w-7xl w-full">
         <PageHeader
           title="فريق المكتب"
-          sub={`${MOCK_USERS.length} مستخدم • 1 مقعد متاح في باقتك`}
+          sub={`${users.length} مستخدم • 1 مقعد متاح في باقتك`}
           actions={
             <>
               <button className="btn btn-brand text-sm py-2.5">+ دعوة عضو</button>
@@ -28,7 +32,7 @@ export default async function UsersPage({ params }: { params: Promise<{ tenant: 
             <div>آخر دخول</div>
           </div>
           <div className="divide-y divide-[var(--border)]">
-            {MOCK_USERS.map((u) => (
+            {users.map((u) => (
               <div
                 key={u.id}
                 className="md:grid md:grid-cols-[1fr_1fr_140px_100px_140px] p-3 sm:p-4 hover:bg-[var(--bg-hover)] cursor-pointer"

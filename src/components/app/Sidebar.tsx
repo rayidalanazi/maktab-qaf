@@ -1,11 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { QafLogo } from "@/components/landing/QafLogo";
 import { cn } from "@/lib/utils";
+import { useSession } from "@/components/app/SessionProvider";
+import { getSupabase } from "@/lib/supabase/client";
 import type { NavSection } from "@/data/app-nav";
+
+function initialsOf(name: string): string {
+  const p = (name || "").trim().split(/\s+/);
+  return ((p[0]?.[0] ?? "") + (p[1]?.[0] ?? "")) || "؟";
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  admin: "مدير النظام", general_manager: "مدير عام",
+  executive_director: "مدير تنفيذي", partner: "شريك", manager: "مدير القضايا",
+  lawyer: "محامي", consultant: "مستشار قانوني", marketer: "مسوّق",
+  auditor: "مدقّق قانوني", accountant: "محاسب", secretary: "سكرتير",
+};
 
 interface SidebarProps {
   tenantName: string;
@@ -27,7 +40,24 @@ export function Sidebar({
   baseHref,
 }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { tenant, profile, isReal } = useSession();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Prefer the real signed-in firm/user; fall back to the build-time props.
+  const effTenantName = (isReal && tenant?.name) || tenantName;
+  const effTenantSlug = (isReal && tenant?.slug) || tenantSlug;
+  const effUserName = profile?.full_name || userName;
+  const effUserRole =
+    (profile?.role && ROLE_LABELS[profile.role]) || profile?.role || userRole;
+  const effUserInitials =
+    profile?.initials || (profile?.full_name ? initialsOf(profile.full_name) : userInitials);
+
+  async function handleLogout(e: React.MouseEvent) {
+    e.preventDefault();
+    try { await getSupabase().auth.signOut(); } catch { /* ignore */ }
+    router.replace("/login");
+  }
 
   return (
     <>
@@ -60,12 +90,12 @@ export function Sidebar({
         <div className="p-4 border-b border-[var(--border)]">
           <Link href={baseHref} className="flex items-center gap-2.5">
             <span className="w-9 h-9 rounded-lg bg-[var(--brand)] text-black grid place-items-center font-display font-black text-lg">
-              {tenantName.slice(0, 1)}
+              {effTenantName.slice(0, 1)}
             </span>
             <div className="min-w-0 flex-1">
-              <div className="font-bold text-sm truncate">{tenantName}</div>
+              <div className="font-bold text-sm truncate">{effTenantName}</div>
               <div className="text-[10px] text-[var(--text-faint)] font-mono" dir="ltr">
-                {tenantSlug}.qaf.sa
+                {effTenantSlug}.qaf.sa
               </div>
             </div>
           </Link>
@@ -116,21 +146,22 @@ export function Sidebar({
         {/* User footer */}
         <div className="p-3 border-t border-[var(--border)] flex items-center gap-2.5">
           <span className="w-9 h-9 rounded-full bg-[var(--brand-deep)] text-black grid place-items-center font-bold text-sm shrink-0">
-            {userInitials}
+            {effUserInitials}
           </span>
           <div className="flex-1 min-w-0">
-            <div className="font-semibold text-sm truncate">{userName}</div>
+            <div className="font-semibold text-sm truncate">{effUserName}</div>
             <div className="text-[10px] text-[var(--text-faint)] truncate">
-              {userRole}
+              {effUserRole}
             </div>
           </div>
-          <Link
-            href="/login"
+          <button
+            type="button"
+            onClick={handleLogout}
             title="تسجيل الخروج"
             className="w-9 h-9 rounded-lg grid place-items-center text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--danger)] transition-colors"
           >
             ⏻
-          </Link>
+          </button>
         </div>
       </aside>
     </>

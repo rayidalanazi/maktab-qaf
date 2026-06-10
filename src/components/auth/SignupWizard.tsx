@@ -6,7 +6,11 @@ import { IdentityStep, type IdentityValues } from "./signup/IdentityStep";
 import { WorkspaceStep, type WorkspaceValues } from "./signup/WorkspaceStep";
 import { SuccessStep } from "./signup/SuccessStep";
 import { getSupabase } from "@/lib/supabase/client";
+import { provisionTenant, PENDING_FIRM_KEY, QafDbError } from "@/lib/data/queries";
 import type { GoogleSignInResult } from "@/lib/supabase/google-signin";
+
+/** The app shell route. The real firm is resolved from the session on the client. */
+const APP_SHELL_HREF = "/t/raed";
 
 type Step = 1 | 2 | 3;
 
@@ -101,8 +105,9 @@ export function SignupWizard() {
         // Only create an auth user if we don't already have a session
         // (Google sign-in completes earlier and gives us one).
         const { data: sessionData } = await sb.auth.getSession();
-        if (!sessionData.session) {
-          const { error: signupErr } = await sb.auth.signUp({
+        let haveSession = !!sessionData.session;
+        if (!haveSession) {
+          const { data: signUpData, error: signupErr } = await sb.auth.signUp({
             email: identity.email,
             password: identity.password,
             options: {
@@ -116,10 +121,41 @@ export function SignupWizard() {
             setServerError(translateSignupError(signupErr.message));
             return;
           }
+          haveSession = !!signUpData.session; // false when email confirmation is on
         }
 
-        // Tenant provisioning happens server-side once qaf's tenants table is
-        // populated. For now, the draft is cleared and we jump to success.
+        // Remember the firm so provisioning completes even if the session isn't
+        // ready yet (email-confirmation flow finishes it on first real login).
+        const pending = {
+          slug: workspace.subdomain.toLowerCase(),
+          name: workspace.firmNameAr,
+          fullName: identity.fullName,
+        };
+        try {
+          localStorage.setItem(PENDING_FIRM_KEY, JSON.stringify(pending));
+        } catch {
+          // ignore
+        }
+
+        // If we already have a live session, create the firm right now.
+        if (haveSession) {
+          try {
+            await provisionTenant({
+              slug: pending.slug,
+              name: pending.name,
+              fullName: pending.fullName,
+            });
+            try { localStorage.removeItem(PENDING_FIRM_KEY); } catch { /* ignore */ }
+          } catch (e) {
+            // qaf_* not set up yet → keep the pending firm; app runs in demo mode.
+            if (!(e instanceof QafDbError && e.notReady)) {
+              const msg = e instanceof Error ? e.message : String(e);
+              // Non-fatal: surface but still let them into the app.
+              console.warn("provisionTenant failed:", msg);
+            }
+          }
+        }
+
         try {
           localStorage.removeItem(DRAFT_KEY);
         } catch {
@@ -127,8 +163,8 @@ export function SignupWizard() {
         }
         setStep(3);
 
-        // Auto-redirect to the demo tenant after a moment (matches SuccessStep copy)
-        setTimeout(() => router.replace("/t/raed"), 3000);
+        // Auto-redirect into the app shell (real firm resolved from session).
+        setTimeout(() => router.replace(APP_SHELL_HREF), 3000);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         setServerError(`صار خلل: ${msg}`);

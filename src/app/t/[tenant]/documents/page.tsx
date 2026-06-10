@@ -1,25 +1,29 @@
+"use client";
+
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
+import { useQafData } from "@/hooks/useQafData";
+import { fetchDocuments } from "@/lib/data/queries";
 import { MOCK_DOCUMENTS } from "@/data/app-mock";
 
 const TYPE_ICON: Record<string, string> = {
   PDF: "📄", DOCX: "📝", JPG: "🖼", IMG: "🖼", XLSX: "📊",
 };
 
-export default async function DocumentsPage({ params }: { params: Promise<{ tenant: string }> }) {
-  await params;
+export default function DocumentsPage() {
+  const { data: documents } = useQafData(fetchDocuments, MOCK_DOCUMENTS);
   return (
     <>
       <Topbar title="المستندات" sub="جميع ملفات المكتب" breadcrumb={["الرئيسية", "المستندات"]} />
       <main className="p-4 sm:p-6 max-w-7xl w-full">
         <PageHeader
           title="المستندات"
-          sub={`${MOCK_DOCUMENTS.length} ملف • 2.3 GB / 5 GB`}
+          sub={`${documents.length} ملف • 2.3 GB / 5 GB`}
           actions={<button className="btn btn-brand text-sm py-2.5">⬆ رفع ملف</button>}
         />
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {MOCK_DOCUMENTS.map((d) => (
+          {documents.map((d) => (
             <div key={d.id} className="card group hover:border-[var(--brand)]/40 cursor-pointer">
               <div className="flex items-start gap-3 mb-3">
                 <span className="text-3xl shrink-0">{TYPE_ICON[d.type] || "📄"}</span>
