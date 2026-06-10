@@ -1,9 +1,12 @@
 "use client";
 
 import { useState, useEffect, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { IdentityStep, type IdentityValues } from "./signup/IdentityStep";
 import { WorkspaceStep, type WorkspaceValues } from "./signup/WorkspaceStep";
 import { SuccessStep } from "./signup/SuccessStep";
+import { getSupabase } from "@/lib/supabase/client";
+import type { GoogleSignInResult } from "@/lib/supabase/google-signin";
 
 type Step = 1 | 2 | 3;
 
@@ -18,6 +21,7 @@ interface DraftShape {
 }
 
 export function SignupWizard() {
+  const router = useRouter();
   const [step, setStep] = useState<Step>(1);
   const [identity, setIdentity] = useState<IdentityValues>({
     fullName: "",
@@ -71,25 +75,64 @@ export function SignupWizard() {
     }
   }, [identity.fullName, identity.email, identity.phone, workspace, step]);
 
-  function handleGoogle() {
-    setServerError(
-      "// تسجيل Google قريباً — يتفعّل بعد توصيل Supabase Auth.",
-    );
+  function handleGoogle(result: GoogleSignInResult) {
+    if (!result.ok) {
+      setServerError(result.error || "فشل الدخول بـ Google");
+      return;
+    }
+    // Google signed up = identity step done. Pre-fill identity from Google
+    // and advance to workspace selection.
+    if (result.user) {
+      setIdentity((p) => ({
+        ...p,
+        fullName: result.user?.name || p.fullName,
+        email: result.user?.email || p.email,
+      }));
+    }
+    setStep(2);
   }
 
   function handleSubmit() {
     setServerError(null);
     startTransition(async () => {
-      // TODO: real call to /api/auth/signup once Supabase is wired.
-      await new Promise((r) => setTimeout(r, 1200));
-
-      // For now we simulate success.
       try {
-        localStorage.removeItem(DRAFT_KEY);
-      } catch {
-        // ignore
+        const sb = getSupabase();
+
+        // Only create an auth user if we don't already have a session
+        // (Google sign-in completes earlier and gives us one).
+        const { data: sessionData } = await sb.auth.getSession();
+        if (!sessionData.session) {
+          const { error: signupErr } = await sb.auth.signUp({
+            email: identity.email,
+            password: identity.password,
+            options: {
+              data: {
+                full_name: identity.fullName,
+                phone: identity.phone,
+              },
+            },
+          });
+          if (signupErr) {
+            setServerError(translateSignupError(signupErr.message));
+            return;
+          }
+        }
+
+        // Tenant provisioning happens server-side once qaf's tenants table is
+        // populated. For now, the draft is cleared and we jump to success.
+        try {
+          localStorage.removeItem(DRAFT_KEY);
+        } catch {
+          // ignore
+        }
+        setStep(3);
+
+        // Auto-redirect to the demo tenant after a moment (matches SuccessStep copy)
+        setTimeout(() => router.replace("/t/raed"), 3000);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setServerError(`صار خلل: ${msg}`);
       }
-      setStep(3);
     });
   }
 
@@ -169,4 +212,21 @@ export function SignupWizard() {
       )}
     </div>
   );
+}
+
+function translateSignupError(msg: string): string {
+  const m = msg.toLowerCase();
+  if (m.includes("already registered") || m.includes("already exists") || m.includes("user already")) {
+    return "في حساب موجود بهالإيميل. ادخل من تسجيل الدخول.";
+  }
+  if (m.includes("password should be")) {
+    return "كلمة المرور ضعيفة. 8 خانات على الأقل، فيها رقم ورمز.";
+  }
+  if (m.includes("invalid email")) {
+    return "البريد الإلكتروني غير صالح.";
+  }
+  if (m.includes("rate limit") || m.includes("too many")) {
+    return "حاولت كثير. خذ نَفَس وارجع بعد دقيقة.";
+  }
+  return msg;
 }

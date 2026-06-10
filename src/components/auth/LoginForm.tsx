@@ -1,22 +1,44 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/Input";
+import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
+import { getSupabase } from "@/lib/supabase/client";
+
+/**
+ * Where to send a freshly-authenticated user.
+ * In the current demo build, every signed-in user lands on the Raed tenant
+ * (the only fully-seeded mock workspace). Once qaf's own Supabase tables are
+ * populated, this will look up users.tenant_id → tenants.slug instead.
+ */
+const POST_LOGIN_HREF = "/t/raed";
 
 export function LoginForm() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  // If a session already exists when the form mounts, jump straight to the app.
+  useEffect(() => {
+    const sb = getSupabase();
+    sb.auth.getSession().then(({ data }) => {
+      if (data.session) router.replace(POST_LOGIN_HREF);
+    });
+  }, [router]);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setInfo(null);
 
     if (!email.includes("@")) {
-      setError("بريد الكتروني غير صحيح. تأكّد من الصيغة.");
+      setError("بريد إلكتروني غير صحيح. تأكّد من الصيغة.");
       return;
     }
     if (pass.length < 6) {
@@ -25,12 +47,24 @@ export function LoginForm() {
     }
 
     startTransition(async () => {
-      // TODO: wire to Supabase Auth + look up tenant subdomain to redirect.
-      // For now we simulate the call and show the would-be flow.
-      await new Promise((r) => setTimeout(r, 800));
-      setError(
-        "// قريباً — Supabase Auth قيد التوصيل. هذه نسخة UI فقط.",
-      );
+      try {
+        const sb = getSupabase();
+        const { data, error: err } = await sb.auth.signInWithPassword({
+          email,
+          password: pass,
+        });
+        if (err) {
+          setError(translateAuthError(err.message));
+          return;
+        }
+        if (data.session) {
+          setInfo("// تم — جاري نقلك للوحة التحكم...");
+          router.replace(POST_LOGIN_HREF);
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setError(`صار خلل: ${msg}`);
+      }
     });
   }
 
@@ -43,6 +77,29 @@ export function LoginForm() {
         <p className="text-sm text-[var(--text-muted)]">
           سجّل دخولك للوصول إلى مكتبك على قاف.
         </p>
+      </div>
+
+      {/* Google sign-in — top for fastest path */}
+      <GoogleSignInButton
+        buttonText="signin_with"
+        onSuccess={(result) => {
+          if (result.ok) {
+            setInfo("// تم — جاري نقلك للوحة التحكم...");
+            router.replace(POST_LOGIN_HREF);
+          } else {
+            setError(result.error || "فشل الدخول بـ Google");
+          }
+        }}
+        onError={(err) => setError(`Google: ${err}`)}
+      />
+
+      <div className="relative my-1">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-[var(--border)]" />
+        </div>
+        <div className="relative flex justify-center text-[10px] uppercase tracking-widest font-mono text-[var(--text-faint)]">
+          <span className="bg-[var(--bg)] px-3">أو بالإيميل</span>
+        </div>
       </div>
 
       <Input
@@ -101,6 +158,12 @@ export function LoginForm() {
         </div>
       )}
 
+      {info && !error && (
+        <div className="text-[12px] text-[var(--brand)] bg-[var(--brand)]/10 border border-[var(--brand)]/30 rounded-lg p-3 leading-relaxed">
+          {info}
+        </div>
+      )}
+
       <button
         type="submit"
         disabled={pending}
@@ -119,26 +182,6 @@ export function LoginForm() {
         )}
       </button>
 
-      <div className="relative my-2">
-        <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-[var(--border)]" />
-        </div>
-        <div className="relative flex justify-center text-[10px] uppercase tracking-widest font-mono text-[var(--text-faint)]">
-          <span className="bg-[var(--bg)] px-3">أو</span>
-        </div>
-      </div>
-
-      <button
-        type="button"
-        className="btn btn-ghost w-full py-3"
-        onClick={() =>
-          setError("// تسجيل Google قريباً — يحتاج Supabase Auth أولاً.")
-        }
-      >
-        <span className="text-base">🇬</span>
-        تابع بـ Google
-      </button>
-
       <p className="text-center text-xs text-[var(--text-muted)] pt-2">
         ما عندك حساب بعد؟{" "}
         <Link
@@ -150,4 +193,28 @@ export function LoginForm() {
       </p>
     </form>
   );
+}
+
+/**
+ * Map common Supabase auth error messages to Najdi-casual Arabic.
+ * Falls back to the original message if no mapping exists.
+ */
+function translateAuthError(msg: string): string {
+  const m = msg.toLowerCase();
+  if (m.includes("invalid login credentials")) {
+    return "البريد أو كلمة المرور غلط. جرّب مرة ثانية.";
+  }
+  if (m.includes("email not confirmed")) {
+    return "البريد ما تأكّد بعد. شيّك إنبوكسك على رابط التأكيد.";
+  }
+  if (m.includes("user not found")) {
+    return "ما لقينا حساب بهالبريد. أنشئ حساب جديد أو راجع البريد.";
+  }
+  if (m.includes("too many")) {
+    return "حاولت كثير. خذ نَفَس ورجع بعد دقيقة.";
+  }
+  if (m.includes("network")) {
+    return "الشبكة قاطعة. تأكد من النت وعاود.";
+  }
+  return msg;
 }

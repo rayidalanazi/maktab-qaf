@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { Input } from "@/components/ui/Input";
+import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
+import type { GoogleSignInResult } from "@/lib/supabase/google-signin";
 import {
   validateEmail,
   validatePassword,
@@ -20,7 +22,7 @@ interface Props {
   values: IdentityValues;
   setValues: (v: IdentityValues) => void;
   onNext: () => void;
-  onGoogle: () => void;
+  onGoogle: (result: GoogleSignInResult) => void;
 }
 
 export function IdentityStep({ values, setValues, onNext, onGoogle }: Props) {
@@ -79,14 +81,7 @@ export function IdentityStep({ values, setValues, onNext, onGoogle }: Props) {
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <button
-        type="button"
-        onClick={onGoogle}
-        className="btn btn-ghost w-full py-3 text-sm"
-      >
-        <span className="text-base">🇬</span>
-        تابع بـ Google — أسرع طريق
-      </button>
+      <GoogleSignInButton buttonText="signup_with" onSuccess={onGoogle} />
 
       <div className="relative my-3">
         <div className="absolute inset-0 flex items-center">
