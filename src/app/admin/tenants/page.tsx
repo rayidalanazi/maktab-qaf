@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
+import { TenantControls } from "@/components/admin/TenantControls";
 import { ADMIN_TENANTS } from "@/data/admin-mock";
 
 const STATUS_COLOR: Record<string, string> = {
@@ -68,12 +69,15 @@ export default function AdminTenantsPage() {
                   </td>
                   <td className="p-3 text-xs text-[var(--text-muted)]">{t.lastActive}</td>
                   <td className="p-3">
-                    <Link
-                      href={`/t/${t.slug}`}
-                      className="text-[11px] text-[var(--brand)] hover:underline"
-                    >
-                      افتح ↗
-                    </Link>
+                    <div className="flex items-center gap-1 justify-end">
+                      <Link
+                        href={`/admin/tenants/${t.slug}`}
+                        className="text-[11px] text-[var(--brand)] hover:underline whitespace-nowrap"
+                      >
+                        التفاصيل
+                      </Link>
+                      <TenantControls tenantSlug={t.slug} tenantName={t.name} status={t.status} variant="compact" />
+                    </div>
                   </td>
                 </tr>
               ))}
