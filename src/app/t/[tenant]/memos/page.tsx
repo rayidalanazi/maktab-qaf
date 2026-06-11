@@ -1,11 +1,27 @@
 "use client";
 
+import { useState } from "react";
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { StatCard } from "@/components/app/StatCard";
 import { useQafData } from "@/hooks/useQafData";
-import { fetchMemos } from "@/lib/data/queries";
+import { fetchMemos, createMemo } from "@/lib/data/queries";
 import type { MemoItem } from "@/lib/data/types";
+import { RecordFormModal, type FormField } from "@/components/app/RecordFormModal";
+
+const MEMO_FIELDS: FormField[] = [
+  { name: "title", label: "عنوان المذكرة", required: true, placeholder: "مذكرة دفاع في دعوى مطالبة مالية" },
+  { name: "type", label: "النوع", type: "select", half: true, default: "مذكرة",
+    options: ["مذكرة", "لائحة", "جواب", "اعتراض", "استشارة", "تنفيذ"].map((v) => ({ value: v, label: v })) },
+  { name: "status", label: "الحالة", type: "select", half: true, default: "draft",
+    options: [
+      { value: "draft", label: "مسودة" }, { value: "audit", label: "مراجعة تدقيق" },
+      { value: "legal", label: "مراجعة قانونية" }, { value: "approved", label: "معتمد" },
+      { value: "published", label: "منشور" },
+    ] },
+  { name: "author", label: "الكاتب", half: true },
+  { name: "due", label: "تاريخ الاستحقاق", type: "date", half: true },
+];
 
 type MemoStatus = "draft" | "audit" | "legal" | "approved" | "published";
 
@@ -68,7 +84,8 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function MemosPage() {
-  const { data: memos } = useQafData(fetchMemos, FALLBACK_MEMOS);
+  const { data: memos, reload } = useQafData(fetchMemos, FALLBACK_MEMOS);
+  const [openNew, setOpenNew] = useState(false);
 
   const count = (status: MemoStatus) =>
     memos.filter((m) => m.status === status).length;
@@ -85,7 +102,7 @@ export default function MemosPage() {
           title="المذكرات واللوائح"
           sub="تتبّع كل مذكرة من المسودة حتى النشر عبر سير اعتماد متعدد المراحل"
           actions={
-            <button className="btn btn-brand text-sm py-2.5">+ مذكرة جديدة</button>
+            <button onClick={() => setOpenNew(true)} className="btn btn-brand text-sm py-2.5">+ مذكرة جديدة</button>
           }
         />
 
@@ -256,6 +273,14 @@ export default function MemosPage() {
           </p>
         </div>
       </main>
+      <RecordFormModal
+        open={openNew}
+        onClose={() => setOpenNew(false)}
+        title="مذكرة جديدة"
+        fields={MEMO_FIELDS}
+        submitLabel="إضافة المذكرة"
+        onSubmit={async (v) => { await createMemo(v); reload(); }}
+      />
     </>
   );
 }

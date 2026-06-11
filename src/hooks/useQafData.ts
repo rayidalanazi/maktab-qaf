@@ -15,7 +15,7 @@
  *   const { data, loading, mode } = useQafData(fetchCases, MOCK_CASES);
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "@/components/app/SessionProvider";
 import { QafDbError } from "@/lib/data/queries";
 
@@ -26,6 +26,8 @@ export interface QafDataResult<T> {
   mode: "loading" | "real" | "demo";
   /** true when showing MOCK fallback rather than live rows */
   isDemo: boolean;
+  /** re-fetch after a create/update (e.g. after "+ new case") */
+  reload: () => void;
 }
 
 export function useQafData<T>(
@@ -36,6 +38,7 @@ export function useQafData<T>(
   const [data, setData] = useState<T[]>(mock);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
 
@@ -77,7 +80,9 @@ export function useQafData<T>(
 
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode]);
+  }, [mode, tick]);
 
-  return { data, loading, error, mode, isDemo: mode !== "real" };
+  const reload = useCallback(() => setTick((t) => t + 1), []);
+
+  return { data, loading, error, mode, isDemo: mode !== "real", reload };
 }

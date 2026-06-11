@@ -1,10 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { useQafData } from "@/hooks/useQafData";
-import { fetchCases } from "@/lib/data/queries";
+import { fetchCases, createCase } from "@/lib/data/queries";
 import { MOCK_CASES } from "@/data/app-mock";
+import { RecordFormModal, type FormField } from "@/components/app/RecordFormModal";
 
 const STATUS_COLOR: Record<string, string> = {
   "نشط": "var(--success)",
@@ -12,8 +14,21 @@ const STATUS_COLOR: Record<string, string> = {
   "مغلق": "var(--text-faint)",
 };
 
+const CASE_FIELDS: FormField[] = [
+  { name: "name", label: "رقم القضية", required: true, placeholder: "2026/0500", dir: "ltr", half: true },
+  { name: "type", label: "النوع", type: "select", half: true, default: "مدني",
+    options: ["تجاري", "مدني", "جزائي", "عمالي", "أحوال شخصية", "تنفيذي", "إداري"].map((v) => ({ value: v, label: v })) },
+  { name: "court", label: "المحكمة", placeholder: "المحكمة العامة بالرياض" },
+  { name: "plaintiff", label: "المدّعي", half: true },
+  { name: "defendant", label: "المدّعى عليه", half: true },
+  { name: "action", label: "الإجراء الحالي", placeholder: "جلسة قادمة", half: true },
+  { name: "deadline", label: "الموعد القادم", type: "date", half: true },
+  { name: "assignedTo", label: "المحامي المسؤول" },
+];
+
 export default function CasesPage() {
-  const { data: cases } = useQafData(fetchCases, MOCK_CASES);
+  const { data: cases, reload } = useQafData(fetchCases, MOCK_CASES);
+  const [openNew, setOpenNew] = useState(false);
   return (
     <>
       <Topbar title="القضايا" sub="جميع قضايا المكتب" breadcrumb={["الرئيسية", "القضايا"]} />
@@ -21,7 +36,7 @@ export default function CasesPage() {
         <PageHeader
           title="القضايا"
           sub={`${cases.length} قضية`}
-          actions={<button className="btn btn-brand text-sm py-2.5">+ قضية جديدة</button>}
+          actions={<button onClick={() => setOpenNew(true)} className="btn btn-brand text-sm py-2.5">+ قضية جديدة</button>}
         />
 
         {/* Filters bar */}
@@ -90,6 +105,15 @@ export default function CasesPage() {
           </div>
         </div>
       </main>
+      <RecordFormModal
+        open={openNew}
+        onClose={() => setOpenNew(false)}
+        title="قضية جديدة"
+        sub="تُضاف لقضايا مكتبك مباشرة"
+        fields={CASE_FIELDS}
+        submitLabel="إضافة القضية"
+        onSubmit={async (v) => { await createCase(v); reload(); }}
+      />
     </>
   );
 }

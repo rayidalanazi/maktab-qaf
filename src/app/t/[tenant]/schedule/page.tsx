@@ -1,12 +1,24 @@
 "use client";
 
+import { useState } from "react";
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { useQafData } from "@/hooks/useQafData";
-import { fetchEvents } from "@/lib/data/queries";
+import { fetchEvents, createEvent } from "@/lib/data/queries";
 import { MOCK_EVENTS } from "@/data/app-mock";
 import type { EventItem } from "@/lib/data/types";
+import { RecordFormModal, type FormField } from "@/components/app/RecordFormModal";
 import { formatHijri } from "@/lib/hijri";
+
+const EVENT_FIELDS: FormField[] = [
+  { name: "title", label: "العنوان", required: true, placeholder: "جلسة قضية 2026/0142" },
+  { name: "type", label: "النوع", type: "select", half: true, default: "جلسة",
+    options: ["جلسة", "اجتماع", "موعد نهائي", "مهمة", "تدريب"].map((v) => ({ value: v, label: v })) },
+  { name: "date", label: "التاريخ", type: "date", required: true, half: true },
+  { name: "time", label: "الوقت", type: "time", half: true },
+  { name: "location", label: "المكان", half: true, placeholder: "المحكمة العامة بالرياض" },
+  { name: "desc", label: "تفاصيل", type: "textarea" },
+];
 
 const TYPE_COLOR: Record<string, string> = {
   "جلسة": "var(--brand)",
@@ -17,7 +29,8 @@ const TYPE_COLOR: Record<string, string> = {
 };
 
 export default function SchedulePage() {
-  const { data: events } = useQafData(fetchEvents, MOCK_EVENTS);
+  const { data: events, reload } = useQafData(fetchEvents, MOCK_EVENTS);
+  const [openNew, setOpenNew] = useState(false);
 
   // Group by date
   const byDate = events.reduce<Record<string, EventItem[]>>((acc, e) => {
@@ -32,7 +45,7 @@ export default function SchedulePage() {
         <PageHeader
           title="الجدولة"
           sub="كل الجلسات والمواعيد القادمة"
-          actions={<button className="btn btn-brand text-sm py-2.5">+ موعد جديد</button>}
+          actions={<button onClick={() => setOpenNew(true)} className="btn btn-brand text-sm py-2.5">+ موعد جديد</button>}
         />
 
         <div className="space-y-4">
@@ -86,6 +99,14 @@ export default function SchedulePage() {
           ))}
         </div>
       </main>
+      <RecordFormModal
+        open={openNew}
+        onClose={() => setOpenNew(false)}
+        title="موعد جديد"
+        fields={EVENT_FIELDS}
+        submitLabel="إضافة الموعد"
+        onSubmit={async (v) => { await createEvent(v); reload(); }}
+      />
     </>
   );
 }

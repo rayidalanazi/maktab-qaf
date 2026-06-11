@@ -1,16 +1,18 @@
 "use client";
 
+import { useState } from "react";
 import { Topbar } from "@/components/app/Topbar";
 import { StatCard } from "@/components/app/StatCard";
 import { PageHeader } from "@/components/app/PageHeader";
 import { useSession } from "@/components/app/SessionProvider";
 import { useQafData } from "@/hooks/useQafData";
 import {
-  fetchCases, fetchEvents, fetchTasks, fetchNotifications,
+  fetchCases, fetchEvents, fetchTasks, fetchNotifications, createCase, createMemo,
 } from "@/lib/data/queries";
 import {
   MOCK_CASES, MOCK_TASKS, MOCK_EVENTS, MOCK_NOTIFICATIONS,
 } from "@/data/app-mock";
+import { RecordFormModal, type FormField } from "@/components/app/RecordFormModal";
 import { formatHijriShort } from "@/lib/hijri";
 
 function greeting(full?: string | null): string {
@@ -18,12 +20,31 @@ function greeting(full?: string | null): string {
   return name ? `مرحباً، ${name} 👋` : "مرحباً 👋";
 }
 
+const QUICK_CASE_FIELDS: FormField[] = [
+  { name: "name", label: "رقم القضية", required: true, dir: "ltr", half: true, placeholder: "2026/0500" },
+  { name: "type", label: "النوع", type: "select", half: true, default: "مدني",
+    options: ["تجاري", "مدني", "جزائي", "عمالي", "أحوال شخصية", "تنفيذي"].map((v) => ({ value: v, label: v })) },
+  { name: "plaintiff", label: "المدّعي", half: true },
+  { name: "defendant", label: "المدّعى عليه", half: true },
+  { name: "deadline", label: "الموعد القادم", type: "date", half: true },
+  { name: "assignedTo", label: "المحامي المسؤول", half: true },
+];
+
+const QUICK_MEMO_FIELDS: FormField[] = [
+  { name: "title", label: "عنوان المذكرة", required: true },
+  { name: "type", label: "النوع", type: "select", half: true, default: "مذكرة",
+    options: ["مذكرة", "لائحة", "جواب", "اعتراض"].map((v) => ({ value: v, label: v })) },
+  { name: "due", label: "الاستحقاق", type: "date", half: true },
+];
+
 export default function TenantDashboardPage() {
   const { profile } = useSession();
-  const { data: cases } = useQafData(fetchCases, MOCK_CASES);
+  const { data: cases, reload: reloadCases } = useQafData(fetchCases, MOCK_CASES);
   const { data: tasks } = useQafData(fetchTasks, MOCK_TASKS);
   const { data: events } = useQafData(fetchEvents, MOCK_EVENTS);
   const { data: notifications } = useQafData(fetchNotifications, MOCK_NOTIFICATIONS);
+  const [openCase, setOpenCase] = useState(false);
+  const [openMemo, setOpenMemo] = useState(false);
 
   const activeCases = cases.filter((c) => c.status === "نشط").length;
   const urgentTasks = tasks.filter((t) => t.priority === "عالية").length;
@@ -39,8 +60,8 @@ export default function TenantDashboardPage() {
           sub="إليك ملخّص ما يحتاج انتباهك اليوم"
           actions={
             <>
-              <button className="btn btn-brand text-sm py-2.5">+ قضية جديدة</button>
-              <button className="btn btn-ghost text-sm py-2.5">📝 مذكرة جديدة</button>
+              <button onClick={() => setOpenCase(true)} className="btn btn-brand text-sm py-2.5">+ قضية جديدة</button>
+              <button onClick={() => setOpenMemo(true)} className="btn btn-ghost text-sm py-2.5">📝 مذكرة جديدة</button>
             </>
           }
         />
@@ -104,6 +125,22 @@ export default function TenantDashboardPage() {
           </div>
         </div>
       </main>
+      <RecordFormModal
+        open={openCase}
+        onClose={() => setOpenCase(false)}
+        title="قضية جديدة"
+        fields={QUICK_CASE_FIELDS}
+        submitLabel="إضافة القضية"
+        onSubmit={async (v) => { await createCase(v); reloadCases(); }}
+      />
+      <RecordFormModal
+        open={openMemo}
+        onClose={() => setOpenMemo(false)}
+        title="مذكرة جديدة"
+        fields={QUICK_MEMO_FIELDS}
+        submitLabel="إضافة المذكرة"
+        onSubmit={async (v) => { await createMemo(v); }}
+      />
     </>
   );
 }

@@ -1,13 +1,29 @@
 "use client";
 
+import { useState } from "react";
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { StatCard } from "@/components/app/StatCard";
 import { useQafData } from "@/hooks/useQafData";
-import { fetchInvoices } from "@/lib/data/queries";
+import { fetchInvoices, createInvoice } from "@/lib/data/queries";
 import type { InvoiceItem } from "@/lib/data/types";
+import { RecordFormModal, type FormField } from "@/components/app/RecordFormModal";
 
 const VAT_RATE = 0.15;
+
+const INVOICE_FIELDS: FormField[] = [
+  { name: "client", label: "العميل", required: true, placeholder: "شركة النجم التجارية" },
+  { name: "amount", label: "المبلغ قبل الضريبة (ر.س)", type: "number", required: true, half: true, placeholder: "20000" },
+  { name: "number", label: "رقم الفاتورة (اختياري)", dir: "ltr", half: true, placeholder: "تلقائي" },
+  { name: "status", label: "الحالة", type: "select", half: true, default: "draft",
+    options: [
+      { value: "draft", label: "مسودة" }, { value: "sent", label: "مرسلة" },
+      { value: "paid", label: "مدفوعة" }, { value: "partially_paid", label: "مدفوعة جزئياً" },
+      { value: "overdue", label: "متأخرة" },
+    ] },
+  { name: "issued", label: "تاريخ الإصدار", type: "date", half: true },
+  { name: "due", label: "الاستحقاق", type: "date", half: true },
+];
 
 // Demo fallback (shown only when no firm/DB yet). Shaped like InvoiceItem.
 const FALLBACK_INVOICES: InvoiceItem[] = [
@@ -35,7 +51,8 @@ function fmt(n: number) {
 }
 
 export default function InvoicesPage() {
-  const { data: invoices } = useQafData(fetchInvoices, FALLBACK_INVOICES);
+  const { data: invoices, reload } = useQafData(fetchInvoices, FALLBACK_INVOICES);
+  const [openNew, setOpenNew] = useState(false);
 
   const totalOf = (inv: InvoiceItem) => inv.total || inv.amount + inv.vat;
   const collected = invoices.filter((i) => i.status === "paid").reduce((s, i) => s + totalOf(i), 0);
@@ -56,7 +73,7 @@ export default function InvoicesPage() {
           title="الفوترة الذكية"
           sub="إصدار فواتير ضريبية مع احتساب ضريبة القيمة المضافة 15% تلقائيًا. التكامل المعتمد مع فاتورة/زاتكا (المرحلة الثانية) قيد الاعتماد."
           actions={
-            <button className="btn btn-brand text-sm py-2.5">
+            <button onClick={() => setOpenNew(true)} className="btn btn-brand text-sm py-2.5">
               + فاتورة جديدة
             </button>
           }
@@ -136,6 +153,15 @@ export default function InvoicesPage() {
           // التكامل المعتمد مع فاتورة/زاتكا (المرحلة الثانية: QR + الختم التشفيري + المقاصّة اللحظية) قيد الاعتماد — مستهدف قبل موجة 2026. حالياً: قالب فاتورة ضريبية + احتساب VAT 15%.
         </p>
       </main>
+      <RecordFormModal
+        open={openNew}
+        onClose={() => setOpenNew(false)}
+        title="فاتورة جديدة"
+        sub="ضريبة القيمة المضافة 15% تُحتسب تلقائياً"
+        fields={INVOICE_FIELDS}
+        submitLabel="إصدار الفاتورة"
+        onSubmit={async (v) => { await createInvoice(v); reload(); }}
+      />
     </>
   );
 }

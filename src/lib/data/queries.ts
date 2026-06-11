@@ -79,6 +79,22 @@ export async function provisionTenant(args: {
   return data as string;
 }
 
+/**
+ * Apply a chosen bundle to a firm: set the plan + enable EXACTLY the addons that
+ * bundle includes (so the office only sees its plan's features, matching the
+ * landing page). Callable by the firm owner (RLS: admin updates own tenant).
+ */
+export async function applyBundleToTenant(
+  tenantId: string, plan: string, addons: string[],
+): Promise<void> {
+  const sb = getSupabase();
+  const { error } = await sb
+    .from("qaf_tenants")
+    .update({ plan, enabled_addons: addons, updated_at: new Date().toISOString() })
+    .eq("id", tenantId);
+  wrap(error);
+}
+
 /** localStorage key holding a firm the user started creating at signup. */
 export const PENDING_FIRM_KEY = "qaf_pending_firm";
 
@@ -93,12 +109,15 @@ export async function maybeProvisionPendingFirm(): Promise<string | null> {
   let raw: string | null = null;
   try { raw = localStorage.getItem(PENDING_FIRM_KEY); } catch { return null; }
   if (!raw) return null;
-  let pend: { slug?: string; name?: string; fullName?: string };
+  let pend: { slug?: string; name?: string; fullName?: string; plan?: string; addons?: string[] };
   try { pend = JSON.parse(raw); } catch { return null; }
   if (!pend.slug || !pend.name) return null;
   const id = await provisionTenant({
-    slug: pend.slug, name: pend.name, fullName: pend.fullName,
+    slug: pend.slug, name: pend.name, fullName: pend.fullName, plan: pend.plan,
   });
+  if (id && pend.plan && pend.addons?.length) {
+    try { await applyBundleToTenant(id, pend.plan, pend.addons); } catch { /* non-fatal */ }
+  }
   try { localStorage.removeItem(PENDING_FIRM_KEY); } catch { /* ignore */ }
   return id;
 }
@@ -458,6 +477,146 @@ export async function createTicket(args: {
     body: args.body,
     priority: args.priority ?? "عادية",
     requester_name: args.requester ?? prof.full_name ?? "",
+  });
+  wrap(error);
+}
+
+// =============================================================================
+// CREATE / MUTATE — the "+ New X" buttons. RLS forces tenant_id = my firm.
+// =============================================================================
+
+/** The signed-in user's firm id (throws a friendly error if none). */
+async function myTenantId(): Promise<string> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from("qaf_users").select("tenant_id").limit(1).maybeSingle();
+  wrap(error);
+  const id = data?.tenant_id as string | null | undefined;
+  if (!id) throw new QafDbError("سجّل دخولك بحساب مكتب لإضافة بيانات حقيقية.", false);
+  return id;
+}
+
+const num = (v: string | undefined) => {
+  const n = parseInt(String(v ?? "").replace(/[^\d-]/g, ""), 10);
+  return Number.isFinite(n) ? n : 0;
+};
+const orNull = (v: string | undefined) => (v && v.trim() ? v.trim() : null);
+
+type V = Record<string, string>;
+
+export async function createCase(v: V): Promise<void> {
+  const tenant_id = await myTenantId();
+  const sb = getSupabase();
+  const { error } = await sb.from("qaf_cases").insert({
+    tenant_id,
+    case_number: v.name,
+    court: orNull(v.court),
+    case_type: v.type || "مدني",
+    status: "open",
+    status_label: "نشط",
+    plaintiff: orNull(v.plaintiff),
+    defendant: orNull(v.defendant),
+    current_action: orNull(v.action),
+    deadline: orNull(v.deadline),
+    assigned_to_name: orNull(v.assignedTo),
+  });
+  wrap(error);
+}
+
+export async function createTask(v: V): Promise<void> {
+  const tenant_id = await myTenantId();
+  const sb = getSupabase();
+  const { error } = await sb.from("qaf_tasks").insert({
+    tenant_id,
+    title: v.title,
+    status: v.status || "todo",
+    priority: v.priority || "متوسطة",
+    due_date: orNull(v.due),
+    owner_name: orNull(v.owner),
+  });
+  wrap(error);
+}
+
+export async function markTaskStatus(id: string | number, status: string): Promise<void> {
+  const sb = getSupabase();
+  const { error } = await sb.from("qaf_tasks").update({ status }).eq("id", id);
+  wrap(error);
+}
+
+export async function createEvent(v: V): Promise<void> {
+  const tenant_id = await myTenantId();
+  const sb = getSupabase();
+  const { error } = await sb.from("qaf_schedule_events").insert({
+    tenant_id,
+    event_type: v.type || "جلسة",
+    title: v.title,
+    description: orNull(v.desc),
+    event_date: v.date,
+    event_time: orNull(v.time),
+    location: orNull(v.location),
+  });
+  wrap(error);
+}
+
+export async function createMemo(v: V): Promise<void> {
+  const tenant_id = await myTenantId();
+  const sb = getSupabase();
+  const { error } = await sb.from("qaf_memos").insert({
+    tenant_id,
+    title: v.title,
+    memo_type: v.type || "مذكرة",
+    status: v.status || "draft",
+    author_name: orNull(v.author),
+    due_date: orNull(v.due),
+  });
+  wrap(error);
+}
+
+export async function createInvoice(v: V): Promise<void> {
+  const tenant_id = await myTenantId();
+  const amount = num(v.amount);
+  const vat = Math.round(amount * 0.15);
+  const sb = getSupabase();
+  const { error } = await sb.from("qaf_invoices").insert({
+    tenant_id,
+    client_name: v.client,
+    invoice_number: v.number || `INV-${Date.now().toString().slice(-6)}`,
+    amount_sar: amount,
+    vat_sar: vat,
+    total_sar: amount + vat,
+    status: v.status || "draft",
+    issued_at: v.issued || undefined,
+    due_at: orNull(v.due),
+  });
+  wrap(error);
+}
+
+export async function createExpense(v: V): Promise<void> {
+  const tenant_id = await myTenantId();
+  const sb = getSupabase();
+  const { error } = await sb.from("qaf_expenses").insert({
+    tenant_id,
+    item: v.item,
+    amount_sar: num(v.amount),
+    category: orNull(v.category),
+    paid_by: orNull(v.paidBy),
+    status: v.status || "معتمد",
+    case_number: orNull(v.caseNumber),
+    spent_at: v.date || undefined,
+  });
+  wrap(error);
+}
+
+export async function createClient(v: V): Promise<void> {
+  const tenant_id = await myTenantId();
+  const sb = getSupabase();
+  const { error } = await sb.from("qaf_clients").insert({
+    tenant_id,
+    name: v.name,
+    type: v.type || "individual",
+    contact: orNull(v.contact),
+    status: v.status || "نشط",
+    lawyer_name: orNull(v.lawyer),
   });
   wrap(error);
 }

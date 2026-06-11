@@ -8,11 +8,16 @@ import {
   suggestSubdomainFromFirmName,
   type SubdomainStatus,
 } from "@/lib/signup-validation";
+import { BUNDLES } from "@/data/pricing";
+
+export type PlanKey =
+  | "bundle_base" | "bundle_small" | "bundle_medium" | "bundle_enterprise" | "";
 
 export interface WorkspaceValues {
   firmNameAr: string;
   subdomain: string;
-  firmSize: "solo" | "small" | "medium" | "large" | "";
+  /** the chosen bundle key — decides which features the office sees */
+  firmSize: PlanKey;
   tosAccept: boolean;
 }
 
@@ -24,12 +29,14 @@ interface Props {
   submitting: boolean;
 }
 
-const FIRM_SIZES = [
-  { v: "solo" as const, label: "محامي مستقل", sub: "1 مستخدم" },
-  { v: "small" as const, label: "صغير", sub: "2–5 مستخدمين" },
-  { v: "medium" as const, label: "متوسط", sub: "6–20 مستخدم" },
-  { v: "large" as const, label: "كبير", sub: "+20 مستخدم" },
-];
+const PLAN_OPTIONS = BUNDLES.map((b) => ({
+  v: b.key as PlanKey,
+  label: b.name_ar,
+  price: b.price_monthly_sar,
+  seats: b.user_seats,
+  count: b.included_addon_keys.length,
+  recommended: b.is_recommended,
+}));
 
 export function WorkspaceStep({ values, setValues, onBack, onSubmit, submitting }: Props) {
   const [subdomainStatus, setSubdomainStatus] = useState<SubdomainStatus>("idle");
@@ -60,7 +67,7 @@ export function WorkspaceStep({ values, setValues, onBack, onSubmit, submitting 
     if (subdomainStatus !== "available") {
       next.subdomain = "النطاق لازم يكون متاح قبل الإنشاء.";
     }
-    if (!values.firmSize) next.firmSize = "اختر حجم مكتبك.";
+    if (!values.firmSize) next.firmSize = "اختر باقتك.";
     if (!values.tosAccept) next.tosAccept = "لازم توافق على الشروط عشان نكمل.";
     setErrors(next);
 
@@ -93,23 +100,43 @@ export function WorkspaceStep({ values, setValues, onBack, onSubmit, submitting 
       )}
 
       <div>
-        <div className="text-sm font-semibold mb-2">حجم مكتبك</div>
-        <div className="grid grid-cols-2 gap-2">
-          {FIRM_SIZES.map((s) => {
-            const active = values.firmSize === s.v;
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-sm font-semibold">اختر باقتك</div>
+          <span className="text-[10px] text-[var(--text-faint)] font-mono">
+            // تشوف مميزات باقتك فقط — وترقّي وقت ما تبي
+          </span>
+        </div>
+        <div className="space-y-2">
+          {PLAN_OPTIONS.map((p) => {
+            const active = values.firmSize === p.v;
             return (
               <button
-                key={s.v}
+                key={p.v}
                 type="button"
-                onClick={() => update("firmSize", s.v)}
-                className={`text-right p-3 rounded-lg border transition-all ${
+                onClick={() => update("firmSize", p.v)}
+                className={`w-full text-right p-3 rounded-lg border transition-all flex items-center justify-between gap-3 ${
                   active
                     ? "border-[var(--brand)] bg-[var(--brand)]/10"
                     : "border-[var(--border)] hover:border-[var(--border-strong)] bg-[var(--bg-card)]"
                 }`}
               >
-                <div className="font-bold text-sm">{s.label}</div>
-                <div className="text-[10px] text-[var(--text-faint)]">{s.sub}</div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-sm">{p.label}</span>
+                    {p.recommended && (
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-[var(--brand)] text-black">
+                        الأكثر طلباً
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-[var(--text-faint)] truncate">
+                    {p.seats} · {p.count} ميزة
+                  </div>
+                </div>
+                <div className="text-left shrink-0">
+                  <span className="font-display font-black num" dir="ltr">{p.price}</span>
+                  <span className="text-[10px] text-[var(--text-faint)]"> ر.س/شهر</span>
+                </div>
               </button>
             );
           })}

@@ -7,8 +7,10 @@ import { WorkspaceStep, type WorkspaceValues } from "./signup/WorkspaceStep";
 import { SuccessStep, type SuccessVariant } from "./signup/SuccessStep";
 import { getSupabase } from "@/lib/supabase/client";
 import {
-  fetchMyProfile, fetchMyTenant, provisionTenant, PENDING_FIRM_KEY, QafDbError,
+  fetchMyProfile, fetchMyTenant, provisionTenant, applyBundleToTenant,
+  PENDING_FIRM_KEY, QafDbError,
 } from "@/lib/data/queries";
+import { getBundle } from "@/data/pricing";
 import type { GoogleSignInResult } from "@/lib/supabase/google-signin";
 
 /** Neutral app shell route. The real firm is resolved from the session on the client. */
@@ -159,12 +161,18 @@ export function SignupWizard() {
           haveSession = !!signUpData.session; // false when email confirmation is on
         }
 
+        // The chosen plan decides which features the office sees.
+        const plan = workspace.firmSize || "bundle_base";
+        const chosenBundle = getBundle(plan);
+
         // Remember the firm so provisioning completes even if the session isn't
         // ready yet (email-confirmation flow finishes it on first real login).
         const pendingFirm = {
           slug: workspace.subdomain.toLowerCase(),
           name: workspace.firmNameAr,
           fullName: identity.fullName,
+          plan,
+          addons: chosenBundle?.included_addon_keys ?? [],
         };
         try {
           localStorage.setItem(PENDING_FIRM_KEY, JSON.stringify(pendingFirm));
@@ -173,13 +181,17 @@ export function SignupWizard() {
         }
 
         if (haveSession) {
-          // Live session → create the firm right now.
+          // Live session → create the firm + apply the chosen bundle's features.
           try {
-            await provisionTenant({
+            const tid = await provisionTenant({
               slug: pendingFirm.slug,
               name: pendingFirm.name,
               fullName: pendingFirm.fullName,
+              plan,
             });
+            if (tid && chosenBundle) {
+              await applyBundleToTenant(tid, chosenBundle.key, chosenBundle.included_addon_keys);
+            }
             try { localStorage.removeItem(PENDING_FIRM_KEY); } catch { /* ignore */ }
           } catch (e) {
             // qaf_* not set up yet → keep the pending firm; app runs in demo mode.

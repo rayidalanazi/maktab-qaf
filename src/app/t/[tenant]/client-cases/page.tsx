@@ -1,11 +1,23 @@
 "use client";
 
+import { useState } from "react";
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { StatCard } from "@/components/app/StatCard";
 import { useQafData } from "@/hooks/useQafData";
-import { fetchClients } from "@/lib/data/queries";
+import { fetchClients, createClient } from "@/lib/data/queries";
 import type { ClientItem } from "@/lib/data/types";
+import { RecordFormModal, type FormField } from "@/components/app/RecordFormModal";
+
+const CLIENT_FIELDS: FormField[] = [
+  { name: "name", label: "اسم العميل", required: true, placeholder: "شركة النجم التجارية" },
+  { name: "type", label: "النوع", type: "select", half: true, default: "individual",
+    options: [{ value: "individual", label: "فرد" }, { value: "company", label: "شركة" }] },
+  { name: "contact", label: "الجوال / التواصل", half: true, dir: "ltr", placeholder: "05xxxxxxxx" },
+  { name: "status", label: "الحالة", type: "select", half: true, default: "نشط",
+    options: ["نشط", "معلق", "غير نشط"].map((v) => ({ value: v, label: v })) },
+  { name: "lawyer", label: "المحامي المسؤول", half: true },
+];
 
 const STATUS_COLOR: Record<string, string> = {
   "نشط": "var(--success)",
@@ -29,7 +41,8 @@ const FALLBACK_CLIENTS: ClientItem[] = [
 ];
 
 export default function ClientCasesPage() {
-  const { data: clients } = useQafData(fetchClients, FALLBACK_CLIENTS);
+  const { data: clients, reload } = useQafData(fetchClients, FALLBACK_CLIENTS);
+  const [openNew, setOpenNew] = useState(false);
 
   const total = clients.length;
   const lawyers = new Set(clients.map((c) => c.lawyer).filter(Boolean)).size;
@@ -46,7 +59,7 @@ export default function ClientCasesPage() {
           title="قضايا العملاء"
           sub="القضايا مجمّعة حسب العميل مع أقرب المواعيد والمواقيت النظامية"
           actions={
-            <button className="btn btn-brand text-sm py-2.5">+ ربط قضية بعميل</button>
+            <button onClick={() => setOpenNew(true)} className="btn btn-brand text-sm py-2.5">+ عميل جديد</button>
           }
         />
 
@@ -165,6 +178,14 @@ export default function ClientCasesPage() {
           تُحدّث المواعيد تلقائيًا حسب التقويم النظامي للمحاكم.
         </p>
       </main>
+      <RecordFormModal
+        open={openNew}
+        onClose={() => setOpenNew(false)}
+        title="عميل جديد"
+        fields={CLIENT_FIELDS}
+        submitLabel="إضافة العميل"
+        onSubmit={async (v) => { await createClient(v); reload(); }}
+      />
     </>
   );
 }

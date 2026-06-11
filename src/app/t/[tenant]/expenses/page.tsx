@@ -1,11 +1,25 @@
 "use client";
 
+import { useState } from "react";
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { StatCard } from "@/components/app/StatCard";
 import { useQafData } from "@/hooks/useQafData";
-import { fetchExpenses } from "@/lib/data/queries";
+import { fetchExpenses, createExpense } from "@/lib/data/queries";
 import type { ExpenseItem } from "@/lib/data/types";
+import { RecordFormModal, type FormField } from "@/components/app/RecordFormModal";
+
+const EXPENSE_FIELDS: FormField[] = [
+  { name: "item", label: "البند", required: true, placeholder: "رسوم رفع دعوى" },
+  { name: "amount", label: "المبلغ (ر.س)", type: "number", required: true, half: true, placeholder: "1500" },
+  { name: "category", label: "الفئة", type: "select", half: true,
+    options: ["رسوم محكمة", "رسوم حكومية", "تنقلات", "سفر", "خبير", "ترجمة", "خدمات", "اشتراكات"].map((v) => ({ value: v, label: v })) },
+  { name: "paidBy", label: "دفعها", half: true },
+  { name: "status", label: "الحالة", type: "select", half: true, default: "معتمد",
+    options: ["معتمد", "بانتظار", "مرفوض"].map((v) => ({ value: v, label: v })) },
+  { name: "caseNumber", label: "القضية المرتبطة", half: true, dir: "ltr", placeholder: "2026/0142" },
+  { name: "date", label: "التاريخ", type: "date", half: true },
+];
 
 // Demo fallback (shown only when no firm/DB yet). Shaped like ExpenseItem.
 const FALLBACK_EXPENSES: ExpenseItem[] = [
@@ -45,7 +59,8 @@ function fmt(n: number) {
 }
 
 export default function ExpensesPage() {
-  const { data: expenses } = useQafData(fetchExpenses, FALLBACK_EXPENSES);
+  const { data: expenses, reload } = useQafData(fetchExpenses, FALLBACK_EXPENSES);
+  const [openNew, setOpenNew] = useState(false);
 
   const monthTotal = expenses.reduce((s, e) => s + e.amount, 0);
   const approved = expenses.filter((e) => e.status === "معتمد");
@@ -65,7 +80,7 @@ export default function ExpensesPage() {
           title="المصروفات"
           sub="كل ريال له حكاية — ومكانه هنا."
           actions={
-            <button className="btn btn-brand text-sm py-2.5">
+            <button onClick={() => setOpenNew(true)} className="btn btn-brand text-sm py-2.5">
               + تسجيل مصروف
             </button>
           }
@@ -167,6 +182,14 @@ export default function ExpensesPage() {
           يعرض هذا الجدول مصروفات المكتب. للأرشيف الكامل راجع التقارير.
         </p>
       </main>
+      <RecordFormModal
+        open={openNew}
+        onClose={() => setOpenNew(false)}
+        title="تسجيل مصروف"
+        fields={EXPENSE_FIELDS}
+        submitLabel="تسجيل المصروف"
+        onSubmit={async (v) => { await createExpense(v); reload(); }}
+      />
     </>
   );
 }
