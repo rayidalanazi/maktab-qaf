@@ -59,7 +59,9 @@ export function SignupWizard() {
       }
       setIdentity((p) => ({ ...p, ...draft.identity }));
       setWorkspace(draft.workspace);
-      setStep(draft.step);
+      // Never restore into the success step — a stale step-3 draft made every
+      // later visit to /signup open on "مكتبك جاهز" with no form.
+      setStep(Math.min(draft.step, 2) as Step);
     } catch {
       // ignore corrupt draft
     }
@@ -68,6 +70,12 @@ export function SignupWizard() {
   // Persist draft on change (excluding password).
   useEffect(() => {
     try {
+      if (step === 3) {
+        // Submission done — make sure the draft never survives (this effect
+        // used to re-save AFTER handleSubmit cleared the key, resurrecting it).
+        localStorage.removeItem(DRAFT_KEY);
+        return;
+      }
       const draft: DraftShape = {
         identity: {
           fullName: identity.fullName,
