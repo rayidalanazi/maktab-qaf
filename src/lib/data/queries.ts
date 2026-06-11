@@ -621,6 +621,39 @@ export async function createClient(v: V): Promise<void> {
   wrap(error);
 }
 
+/**
+ * MARKETPLACE — "buy" one or more addons (the addon + its unmet dependencies).
+ * Enables them on the firm + records a SIMULATED payment (Moyasar later).
+ * Pure-add: never removes an existing addon. Returns the firm's new addon list.
+ */
+export async function purchaseAddons(
+  addonKeys: string[], amountSar: number,
+): Promise<string[]> {
+  const tenant_id = await myTenantId();
+  const sb = getSupabase();
+  const { data: t, error: e1 } = await sb
+    .from("qaf_tenants").select("enabled_addons").eq("id", tenant_id).maybeSingle();
+  wrap(e1);
+  const current: string[] = t?.enabled_addons ?? [];
+  const merged = Array.from(new Set([...current, ...addonKeys]));
+  const { error: e2 } = await sb
+    .from("qaf_tenants")
+    .update({ enabled_addons: merged, updated_at: new Date().toISOString() })
+    .eq("id", tenant_id);
+  wrap(e2);
+  if (amountSar > 0) {
+    const { error: e3 } = await sb.from("qaf_payments").insert({
+      tenant_id,
+      amount_sar: amountSar,
+      status: "paid",
+      payment_type: "addon",
+      paid_at: new Date().toISOString(),
+    });
+    wrap(e3);
+  }
+  return merged;
+}
+
 // =============================================================================
 // PLATFORM ADMIN (operator) — live cross-tenant reads + control actions.
 // RLS only returns cross-tenant rows when auth.uid() ∈ qaf_platform_admins.

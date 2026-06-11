@@ -30,6 +30,8 @@ export const APP_NAV: NavSection[] = [
     items: [
       { key: "home", label_ar: "الرئيسية", href: "", icon: "🏠", roles: ALL_ROLES },
       { key: "my-tasks", label_ar: "مهامي", href: "/my-tasks", icon: "📌", roles: ALL_ROLES },
+      // Marketplace — always visible to every signed-in tier (no addon gate).
+      { key: "market", label_ar: "سوق الإضافات", href: "/market", icon: "🛒", roles: ALL_ROLES },
     ],
   },
   {
