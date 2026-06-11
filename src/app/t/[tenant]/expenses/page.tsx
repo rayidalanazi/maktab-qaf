@@ -1,135 +1,57 @@
+"use client";
+
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { StatCard } from "@/components/app/StatCard";
+import { useQafData } from "@/hooks/useQafData";
+import { fetchExpenses } from "@/lib/data/queries";
+import type { ExpenseItem } from "@/lib/data/types";
 
-type Status = "approved" | "pending" | "rejected";
-
-interface Expense {
-  id: string;
-  item: string;
-  category: string;
-  icon: string;
-  amount: number;
-  date: string;
-  paidBy: string;
-  status: Status;
-  case: string;
-}
-
-const EXPENSES: Expense[] = [
-  {
-    id: "EXP-1042",
-    item: "رسوم رفع دعوى تجارية",
-    category: "رسوم محكمة",
-    icon: "⚖",
-    amount: 3500,
-    date: "2026-06-08",
-    paidBy: "أحمد الدوسري",
-    status: "approved",
-    case: "القضية ١٢٤ — المحكمة التجارية بالرياض",
-  },
-  {
-    id: "EXP-1041",
-    item: "أتعاب خبير محاسبي مُعتمد",
-    category: "خبير",
-    icon: "📊",
-    amount: 6000,
-    date: "2026-06-05",
-    paidBy: "سارة العتيبي",
-    status: "pending",
-    case: "القضية ٠٩٨ — المحكمة العامة بالرياض",
-  },
-  {
-    id: "EXP-1040",
-    item: "تنقلات وحضور جلسة بجدة",
-    category: "تنقلات",
-    icon: "✈",
-    amount: 1850,
-    date: "2026-06-03",
-    paidBy: "أحمد الدوسري",
-    status: "approved",
-    case: "القضية ١١٧ — المحكمة العمالية بجدة",
-  },
-  {
-    id: "EXP-1039",
-    item: "ترجمة عقد معتمد إنجليزي",
-    category: "ترجمة",
-    icon: "🌐",
-    amount: 950,
-    date: "2026-05-29",
-    paidBy: "نورة القحطاني",
-    status: "approved",
-    case: "القضية ١٠٣ — محكمة التنفيذ بالرياض",
-  },
-  {
-    id: "EXP-1038",
-    item: "رسوم استخراج صك تنفيذي",
-    category: "رسوم محكمة",
-    icon: "⚖",
-    amount: 1200,
-    date: "2026-05-24",
-    paidBy: "سارة العتيبي",
-    status: "pending",
-    case: "القضية ٠٨٧ — محكمة التنفيذ بالرياض",
-  },
-  {
-    id: "EXP-1037",
-    item: "أتعاب مترجم محلّف بالجلسة",
-    category: "ترجمة",
-    icon: "🌐",
-    amount: 1400,
-    date: "2026-05-20",
-    paidBy: "خالد الشهري",
-    status: "rejected",
-    case: "القضية ١٢٢ — المحكمة الإدارية بالرياض",
-  },
-  {
-    id: "EXP-1036",
-    item: "تنقلات لمحكمة الأحوال الشخصية",
-    category: "تنقلات",
-    icon: "✈",
-    amount: 600,
-    date: "2026-05-16",
-    paidBy: "نورة القحطاني",
-    status: "approved",
-    case: "القضية ٠٧٩ — محكمة الأحوال الشخصية بالرياض",
-  },
+// Demo fallback (shown only when no firm/DB yet). Shaped like ExpenseItem.
+const FALLBACK_EXPENSES: ExpenseItem[] = [
+  { id: "EXP-1042", item: "رسوم رفع دعوى تجارية", category: "رسوم محكمة", amount: 3500, date: "2026-06-08", paidBy: "أحمد الدوسري", status: "معتمد", caseNumber: "القضية ١٢٤ — المحكمة التجارية بالرياض" },
+  { id: "EXP-1041", item: "أتعاب خبير محاسبي مُعتمد", category: "خبير", amount: 6000, date: "2026-06-05", paidBy: "سارة العتيبي", status: "بانتظار", caseNumber: "القضية ٠٩٨ — المحكمة العامة بالرياض" },
+  { id: "EXP-1040", item: "تنقلات وحضور جلسة بجدة", category: "تنقلات", amount: 1850, date: "2026-06-03", paidBy: "أحمد الدوسري", status: "معتمد", caseNumber: "القضية ١١٧ — المحكمة العمالية بجدة" },
+  { id: "EXP-1039", item: "ترجمة عقد معتمد إنجليزي", category: "ترجمة", amount: 950, date: "2026-05-29", paidBy: "نورة القحطاني", status: "معتمد", caseNumber: "القضية ١٠٣ — محكمة التنفيذ بالرياض" },
+  { id: "EXP-1038", item: "رسوم استخراج صك تنفيذي", category: "رسوم محكمة", amount: 1200, date: "2026-05-24", paidBy: "سارة العتيبي", status: "بانتظار", caseNumber: "القضية ٠٨٧ — محكمة التنفيذ بالرياض" },
+  { id: "EXP-1037", item: "أتعاب مترجم محلّف بالجلسة", category: "ترجمة", amount: 1400, date: "2026-05-20", paidBy: "خالد الشهري", status: "مرفوض", caseNumber: "القضية ١٢٢ — المحكمة الإدارية بالرياض" },
+  { id: "EXP-1036", item: "تنقلات لمحكمة الأحوال الشخصية", category: "تنقلات", amount: 600, date: "2026-05-16", paidBy: "نورة القحطاني", status: "معتمد", caseNumber: "القضية ٠٧٩ — محكمة الأحوال الشخصية بالرياض" },
 ];
 
-const STATUS_META: Record<Status, { label: string; color: string }> = {
-  approved: { label: "معتمد", color: "var(--success)" },
-  pending: { label: "بانتظار الموافقة", color: "var(--warn)" },
-  rejected: { label: "مرفوض", color: "var(--danger)" },
+const STATUS_META: Record<string, { label: string; color: string }> = {
+  "معتمد": { label: "معتمد", color: "var(--success)" },
+  "بانتظار": { label: "بانتظار الموافقة", color: "var(--warn)" },
+  "مرفوض": { label: "مرفوض", color: "var(--danger)" },
 };
 
-const CATEGORY_META: Record<string, string> = {
-  "رسوم محكمة": "var(--brand)",
-  تنقلات: "var(--info)",
-  خبير: "var(--accent)",
-  ترجمة: "var(--success)",
+const CATEGORY_STYLE: Record<string, { icon: string; color: string }> = {
+  "رسوم محكمة": { icon: "⚖", color: "var(--brand)" },
+  "رسوم حكومية": { icon: "⚖", color: "var(--brand)" },
+  "تنقلات": { icon: "✈", color: "var(--info)" },
+  "سفر": { icon: "✈", color: "var(--info)" },
+  "خبير": { icon: "📊", color: "var(--accent)" },
+  "خبراء": { icon: "📊", color: "var(--accent)" },
+  "ترجمة": { icon: "🌐", color: "var(--success)" },
+  "خدمات": { icon: "🧰", color: "var(--success)" },
+  "اشتراكات": { icon: "🔄", color: "var(--info)" },
 };
+
+function catStyle(cat: string) {
+  return CATEGORY_STYLE[cat] ?? { icon: "💸", color: "var(--brand)" };
+}
 
 function fmt(n: number) {
   return n.toLocaleString("en-US");
 }
 
-export default async function ExpensesPage({
-  params,
-}: {
-  params: Promise<{ tenant: string }>;
-}) {
-  await params;
+export default function ExpensesPage() {
+  const { data: expenses } = useQafData(fetchExpenses, FALLBACK_EXPENSES);
 
-  const monthTotal = EXPENSES.reduce((s, e) => s + e.amount, 0);
-  const approvedTotal = EXPENSES.filter((e) => e.status === "approved").reduce(
-    (s, e) => s + e.amount,
-    0,
-  );
-  const pendingTotal = EXPENSES.filter((e) => e.status === "pending").reduce(
-    (s, e) => s + e.amount,
-    0,
-  );
-  const pendingCount = EXPENSES.filter((e) => e.status === "pending").length;
+  const monthTotal = expenses.reduce((s, e) => s + e.amount, 0);
+  const approved = expenses.filter((e) => e.status === "معتمد");
+  const approvedTotal = approved.reduce((s, e) => s + e.amount, 0);
+  const pendingArr = expenses.filter((e) => e.status === "بانتظار");
+  const pendingTotal = pendingArr.reduce((s, e) => s + e.amount, 0);
 
   return (
     <>
@@ -151,28 +73,9 @@ export default async function ExpensesPage({
 
         {/* Stat row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-          <StatCard
-            label="إجمالي الشهر"
-            value={`${fmt(monthTotal)} ر.س`}
-            icon="💰"
-            accent="brand"
-            trend={{ v: "+8%", up: true }}
-            hint="مقارنة بمايو ٢٠٢٦"
-          />
-          <StatCard
-            label="معتمد"
-            value={`${fmt(approvedTotal)} ر.س`}
-            icon="✓"
-            accent="success"
-            hint={`${EXPENSES.filter((e) => e.status === "approved").length} بنود مُعتمدة`}
-          />
-          <StatCard
-            label="بانتظار الموافقة"
-            value={`${fmt(pendingTotal)} ر.س`}
-            icon="⏳"
-            accent="warn"
-            hint={`${pendingCount} بنود تنتظر القرار`}
-          />
+          <StatCard label="إجمالي الشهر" value={`${fmt(monthTotal)} ر.س`} icon="💰" accent="brand" trend={{ v: "+8%", up: true }} hint="مقارنة بمايو ٢٠٢٦" />
+          <StatCard label="معتمد" value={`${fmt(approvedTotal)} ر.س`} icon="✓" accent="success" hint={`${approved.length} بنود مُعتمدة`} />
+          <StatCard label="بانتظار الموافقة" value={`${fmt(pendingTotal)} ر.س`} icon="⏳" accent="warn" hint={`${pendingArr.length} بنود تنتظر القرار`} />
         </div>
 
         {/* Expenses table */}
@@ -180,30 +83,18 @@ export default async function ExpensesPage({
           <table className="w-full min-w-[640px] text-sm">
             <thead>
               <tr className="text-right text-[var(--text-muted)] border-b border-[var(--border)]">
-                <th className="font-medium px-4 py-3.5 whitespace-nowrap">
-                  البند
-                </th>
-                <th className="font-medium px-4 py-3.5 whitespace-nowrap">
-                  المبلغ
-                </th>
-                <th className="font-medium px-4 py-3.5 whitespace-nowrap">
-                  التاريخ
-                </th>
-                <th className="font-medium px-4 py-3.5 whitespace-nowrap">
-                  دفعها
-                </th>
-                <th className="font-medium px-4 py-3.5 whitespace-nowrap">
-                  الحالة
-                </th>
-                <th className="font-medium px-4 py-3.5 whitespace-nowrap">
-                  القضية المرتبطة
-                </th>
+                <th className="font-medium px-4 py-3.5 whitespace-nowrap">البند</th>
+                <th className="font-medium px-4 py-3.5 whitespace-nowrap">المبلغ</th>
+                <th className="font-medium px-4 py-3.5 whitespace-nowrap">التاريخ</th>
+                <th className="font-medium px-4 py-3.5 whitespace-nowrap">دفعها</th>
+                <th className="font-medium px-4 py-3.5 whitespace-nowrap">الحالة</th>
+                <th className="font-medium px-4 py-3.5 whitespace-nowrap">القضية المرتبطة</th>
               </tr>
             </thead>
             <tbody>
-              {EXPENSES.map((e) => {
-                const st = STATUS_META[e.status];
-                const catColor = CATEGORY_META[e.category] ?? "var(--brand)";
+              {expenses.map((e) => {
+                const st = STATUS_META[e.status] ?? { label: e.status, color: "var(--text-muted)" };
+                const cat = catStyle(e.category);
                 return (
                   <tr
                     key={e.id}
@@ -214,11 +105,11 @@ export default async function ExpensesPage({
                         <span
                           className="shrink-0 w-8 h-8 rounded-lg grid place-items-center text-base"
                           style={{
-                            background: `color-mix(in srgb, ${catColor} 14%, transparent)`,
-                            color: catColor,
+                            background: `color-mix(in srgb, ${cat.color} 14%, transparent)`,
+                            color: cat.color,
                           }}
                         >
-                          {e.icon}
+                          {cat.icon}
                         </span>
                         <div className="min-w-0">
                           <div className="font-medium text-[var(--text)] break-words leading-snug">
@@ -228,8 +119,8 @@ export default async function ExpensesPage({
                             <span
                               className="pill"
                               style={{
-                                background: `color-mix(in srgb, ${catColor} 12%, transparent)`,
-                                color: catColor,
+                                background: `color-mix(in srgb, ${cat.color} 12%, transparent)`,
+                                color: cat.color,
                               }}
                             >
                               {e.category}
@@ -242,15 +133,11 @@ export default async function ExpensesPage({
                       </div>
                     </td>
                     <td className="px-4 py-3.5 align-top whitespace-nowrap">
-                      <span className="num font-semibold text-[var(--text)]" dir="ltr">
-                        {fmt(e.amount)}
-                      </span>{" "}
+                      <span className="num font-semibold text-[var(--text)]" dir="ltr">{fmt(e.amount)}</span>{" "}
                       <span className="text-[var(--text-faint)] text-xs">ر.س</span>
                     </td>
                     <td className="px-4 py-3.5 align-top whitespace-nowrap text-[var(--text-muted)]">
-                      <span className="num" dir="ltr">
-                        {e.date}
-                      </span>
+                      <span className="num" dir="ltr">{e.date}</span>
                     </td>
                     <td className="px-4 py-3.5 align-top whitespace-nowrap text-[var(--text)]">
                       {e.paidBy}
@@ -267,7 +154,7 @@ export default async function ExpensesPage({
                       </span>
                     </td>
                     <td className="px-4 py-3.5 align-top text-[var(--text-muted)] max-w-[260px]">
-                      <span className="break-words leading-snug">{e.case}</span>
+                      <span className="break-words leading-snug">{e.caseNumber}</span>
                     </td>
                   </tr>
                 );
@@ -277,8 +164,7 @@ export default async function ExpensesPage({
         </div>
 
         <p className="text-xs text-[var(--text-faint)] mt-3 px-1">
-          {/* الأرقام أعلاه للشهر الجاري فقط — الأرشيف الكامل في التقارير. */}
-          يعرض هذا الجدول مصروفات الشهر الجاري. للأرشيف الكامل راجع التقارير.
+          يعرض هذا الجدول مصروفات المكتب. للأرشيف الكامل راجع التقارير.
         </p>
       </main>
     </>

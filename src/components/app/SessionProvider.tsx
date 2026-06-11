@@ -14,7 +14,7 @@
  */
 
 import {
-  createContext, useContext, useEffect, useMemo, useState, type ReactNode,
+  createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode,
 } from "react";
 import { getSupabase } from "@/lib/supabase/client";
 import {
@@ -44,7 +44,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [email, setEmail] = useState<string | null>(null);
   const [profile, setProfile] = useState<QafProfile | null>(null);
   const [tenant, setTenant] = useState<QafTenant | null>(null);
-  const [tick, setTick] = useState(0);
+  const resolveRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     let cancelled = false;
@@ -93,16 +93,31 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    resolve();
+    resolveRef.current = () => { void resolve(); };
 
-    const { data: listener } = sb.auth.onAuthStateChange(() => {
-      setTick((t) => t + 1); // re-resolve on sign in/out
+    // Resolve once on mount.
+    void resolve();
+
+    // Subscribe ONCE and re-resolve ONLY on real auth transitions. We must NOT
+    // make this effect depend on a counter we bump from inside the callback:
+    // onAuthStateChange emits INITIAL_SESSION immediately on every subscribe, so
+    // re-subscribing per change created an INITIAL_SESSION feedback loop that
+    // pegged the main thread and froze the page on any interaction.
+    const { data: listener } = sb.auth.onAuthStateChange((event) => {
+      if (
+        event === "SIGNED_IN" || event === "SIGNED_OUT" ||
+        event === "TOKEN_REFRESHED" || event === "USER_UPDATED"
+      ) {
+        void resolve();
+      }
     });
+
     return () => {
       cancelled = true;
       listener.subscription.unsubscribe();
     };
-  }, [tick]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const value = useMemo<SessionState>(() => ({
     mode,
@@ -111,7 +126,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     profile,
     tenant,
     isReal: mode === "real",
-    refresh: () => setTick((t) => t + 1),
+    refresh: () => resolveRef.current(),
   }), [mode, userId, email, profile, tenant]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

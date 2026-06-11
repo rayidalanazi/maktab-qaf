@@ -1,124 +1,48 @@
+"use client";
+
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { StatCard } from "@/components/app/StatCard";
-
-type InvoiceStatus = "paid" | "sent" | "overdue" | "draft";
-
-interface Invoice {
-  no: string;
-  client: string;
-  net: number;
-  vat: number;
-  issued: string;
-  due: string;
-  status: InvoiceStatus;
-}
+import { useQafData } from "@/hooks/useQafData";
+import { fetchInvoices } from "@/lib/data/queries";
+import type { InvoiceItem } from "@/lib/data/types";
 
 const VAT_RATE = 0.15;
 
-const INVOICES: Invoice[] = [
-  {
-    no: "QF-2026-0117",
-    client: "شركة الخليج للمقاولات",
-    net: 24000,
-    vat: 24000 * VAT_RATE,
-    issued: "2026-05-02",
-    due: "2026-06-01",
-    status: "paid",
-  },
-  {
-    no: "QF-2026-0118",
-    client: "مؤسسة نخيل الرياض التجارية",
-    net: 8500,
-    vat: 8500 * VAT_RATE,
-    issued: "2026-05-09",
-    due: "2026-06-08",
-    status: "sent",
-  },
-  {
-    no: "QF-2026-0119",
-    client: "عبدالعزيز بن سعد الدوسري",
-    net: 5200,
-    vat: 5200 * VAT_RATE,
-    issued: "2026-04-15",
-    due: "2026-05-15",
-    status: "overdue",
-  },
-  {
-    no: "QF-2026-0120",
-    client: "شركة وادي حنيفة القابضة",
-    net: 41000,
-    vat: 41000 * VAT_RATE,
-    issued: "2026-05-18",
-    due: "2026-06-17",
-    status: "sent",
-  },
-  {
-    no: "QF-2026-0121",
-    client: "منيرة بنت فهد العتيبي",
-    net: 3000,
-    vat: 3000 * VAT_RATE,
-    issued: "2026-03-28",
-    due: "2026-04-27",
-    status: "overdue",
-  },
-  {
-    no: "QF-2026-0122",
-    client: "مجموعة طويق الصناعية",
-    net: 17500,
-    vat: 17500 * VAT_RATE,
-    issued: "2026-05-21",
-    due: "2026-06-20",
-    status: "paid",
-  },
-  {
-    no: "QF-2026-0123",
-    client: "شركة سدير اللوجستية",
-    net: 9800,
-    vat: 9800 * VAT_RATE,
-    issued: "2026-05-25",
-    due: "2026-06-24",
-    status: "draft",
-  },
+// Demo fallback (shown only when no firm/DB yet). Shaped like InvoiceItem.
+const FALLBACK_INVOICES: InvoiceItem[] = [
+  { id: "QF-2026-0117", client: "شركة الخليج للمقاولات", number: "QF-2026-0117", amount: 24000, vat: 24000 * VAT_RATE, total: 24000 * 1.15, status: "paid", issued: "2026-05-02", due: "2026-06-01" },
+  { id: "QF-2026-0118", client: "مؤسسة نخيل الرياض التجارية", number: "QF-2026-0118", amount: 8500, vat: 8500 * VAT_RATE, total: 8500 * 1.15, status: "sent", issued: "2026-05-09", due: "2026-06-08" },
+  { id: "QF-2026-0119", client: "عبدالعزيز بن سعد الدوسري", number: "QF-2026-0119", amount: 5200, vat: 5200 * VAT_RATE, total: 5200 * 1.15, status: "overdue", issued: "2026-04-15", due: "2026-05-15" },
+  { id: "QF-2026-0120", client: "شركة وادي حنيفة القابضة", number: "QF-2026-0120", amount: 41000, vat: 41000 * VAT_RATE, total: 41000 * 1.15, status: "sent", issued: "2026-05-18", due: "2026-06-17" },
+  { id: "QF-2026-0121", client: "منيرة بنت فهد العتيبي", number: "QF-2026-0121", amount: 3000, vat: 3000 * VAT_RATE, total: 3000 * 1.15, status: "overdue", issued: "2026-03-28", due: "2026-04-27" },
+  { id: "QF-2026-0122", client: "مجموعة طويق الصناعية", number: "QF-2026-0122", amount: 17500, vat: 17500 * VAT_RATE, total: 17500 * 1.15, status: "paid", issued: "2026-05-21", due: "2026-06-20" },
+  { id: "QF-2026-0123", client: "شركة سدير اللوجستية", number: "QF-2026-0123", amount: 9800, vat: 9800 * VAT_RATE, total: 9800 * 1.15, status: "draft", issued: "2026-05-25", due: "2026-06-24" },
 ];
 
-const STATUS_META: Record<
-  InvoiceStatus,
-  { label: string; color: string }
-> = {
+const STATUS_META: Record<string, { label: string; color: string }> = {
   paid: { label: "مدفوعة", color: "var(--success)" },
   sent: { label: "مرسلة", color: "var(--info)" },
+  partially_paid: { label: "مدفوعة جزئياً", color: "var(--warn)" },
   overdue: { label: "متأخرة", color: "var(--danger)" },
   draft: { label: "مسودة", color: "var(--text-muted)" },
+  cancelled: { label: "ملغاة", color: "var(--text-faint)" },
+  refunded: { label: "مُستردة", color: "var(--text-faint)" },
 };
 
 function fmt(n: number) {
-  return n.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-export default async function InvoicesPage({
-  params,
-}: {
-  params: Promise<{ tenant: string }>;
-}) {
-  await params;
+export default function InvoicesPage() {
+  const { data: invoices } = useQafData(fetchInvoices, FALLBACK_INVOICES);
 
-  const total = (inv: Invoice) => inv.net + inv.vat;
-
-  const collected = INVOICES.filter((i) => i.status === "paid").reduce(
-    (s, i) => s + total(i),
-    0,
-  );
-  const pending = INVOICES.filter(
-    (i) => i.status === "sent" || i.status === "draft",
-  ).reduce((s, i) => s + total(i), 0);
-  const overdue = INVOICES.filter((i) => i.status === "overdue").reduce(
-    (s, i) => s + total(i),
-    0,
-  );
+  const totalOf = (inv: InvoiceItem) => inv.total || inv.amount + inv.vat;
+  const collected = invoices.filter((i) => i.status === "paid").reduce((s, i) => s + totalOf(i), 0);
+  const pending = invoices
+    .filter((i) => i.status === "sent" || i.status === "draft" || i.status === "partially_paid")
+    .reduce((s, i) => s + totalOf(i), 0);
+  const overdue = invoices.filter((i) => i.status === "overdue").reduce((s, i) => s + totalOf(i), 0);
 
   return (
     <>
@@ -140,36 +64,10 @@ export default async function InvoicesPage({
 
         {/* Stat row */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
-          <StatCard
-            label="إجمالي محصّل"
-            value={fmt(collected)}
-            icon="✅"
-            accent="success"
-            trend={{ v: "+12%", up: true }}
-            hint="ر.س — فواتير مدفوعة"
-          />
-          <StatCard
-            label="معلّق"
-            value={fmt(pending)}
-            icon="⏳"
-            accent="info"
-            hint="ر.س — مرسلة + مسودات"
-          />
-          <StatCard
-            label="متأخر"
-            value={fmt(overdue)}
-            icon="⚠"
-            accent="warn"
-            trend={{ v: "+2", up: false }}
-            hint="ر.س — تجاوزت الاستحقاق"
-          />
-          <StatCard
-            label="عدد الفواتير"
-            value={INVOICES.length}
-            icon="🧾"
-            accent="brand"
-            hint="خلال الدورة الحالية"
-          />
+          <StatCard label="إجمالي محصّل" value={fmt(collected)} icon="✅" accent="success" trend={{ v: "+12%", up: true }} hint="ر.س — فواتير مدفوعة" />
+          <StatCard label="معلّق" value={fmt(pending)} icon="⏳" accent="info" hint="ر.س — مرسلة + مسودات" />
+          <StatCard label="متأخر" value={fmt(overdue)} icon="⚠" accent="warn" trend={{ v: "+2", up: false }} hint="ر.س — تجاوزت الاستحقاق" />
+          <StatCard label="عدد الفواتير" value={invoices.length} icon="🧾" accent="brand" hint="خلال الدورة الحالية" />
         </div>
 
         {/* Invoices table */}
@@ -186,47 +84,35 @@ export default async function InvoicesPage({
               </tr>
             </thead>
             <tbody>
-              {INVOICES.map((inv) => {
-                const meta = STATUS_META[inv.status];
+              {invoices.map((inv) => {
+                const meta = STATUS_META[inv.status] ?? STATUS_META.draft;
                 return (
                   <tr
-                    key={inv.no}
+                    key={inv.id}
                     className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-hover)] transition-colors"
                   >
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span className="num font-mono text-[var(--brand)]" dir="ltr">
-                        {inv.no}
+                        {inv.number}
                       </span>
                     </td>
                     <td className="px-4 py-3 max-w-[220px]">
-                      <span className="block truncate text-[var(--text)]">
-                        {inv.client}
-                      </span>
+                      <span className="block truncate text-[var(--text)]">{inv.client}</span>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="font-semibold">
-                        <span className="num" dir="ltr">
-                          {fmt(inv.net + inv.vat)}
-                        </span>{" "}
+                        <span className="num" dir="ltr">{fmt(totalOf(inv))}</span>{" "}
                         <span className="text-[var(--text-faint)] text-xs">ر.س</span>
                       </div>
                       <div className="text-[11px] text-[var(--text-faint)]">
-                        ضريبة{" "}
-                        <span className="num" dir="ltr">
-                          {fmt(inv.vat)}
-                        </span>{" "}
-                        (15%)
+                        ضريبة <span className="num" dir="ltr">{fmt(inv.vat)}</span> (15%)
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-[var(--text-muted)]">
-                      <span className="num" dir="ltr">
-                        {inv.issued}
-                      </span>
+                      <span className="num" dir="ltr">{inv.issued}</span>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-[var(--text-muted)]">
-                      <span className="num" dir="ltr">
-                        {inv.due}
-                      </span>
+                      <span className="num" dir="ltr">{inv.due}</span>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span
