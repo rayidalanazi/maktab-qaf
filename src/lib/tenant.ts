@@ -90,8 +90,20 @@ export async function loadTenantBySlug(slug: string): Promise<TenantContext | nu
   };
 
   const ctx = KNOWN_DEV_TENANTS[slug];
-  if (!ctx) return null;
-  return { slug, ...ctx };
+  if (ctx) return { slug, ...ctx };
+
+  // On a SERVER runtime (Vercel / Docker / OVH) any tenant subdomain or path
+  // must render — e.g. meeem.qaf.sa → /t/meeem. The real firm name + plan are
+  // resolved client-side from the session; here we return a neutral base-tier
+  // placeholder so the page renders instead of 404. (On the static GitHub Pages
+  // build only the generateStaticParams slugs exist, so this branch is unused
+  // there.)
+  return {
+    slug,
+    name: slug,
+    plan: "bundle_base",
+    enabledAddons: ["core_cases", "schedule_attendance", "documents_vault"],
+  };
 }
 
 /**
