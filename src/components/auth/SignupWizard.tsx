@@ -11,8 +11,8 @@ import {
 } from "@/lib/data/queries";
 import type { GoogleSignInResult } from "@/lib/supabase/google-signin";
 
-/** The app shell route. The real firm is resolved from the session on the client. */
-const APP_SHELL_HREF = "/t/raed";
+/** Neutral app shell route. The real firm is resolved from the session on the client. */
+const APP_SHELL_HREF = "/t/app";
 
 type Step = 1 | 2 | 3;
 

@@ -6,7 +6,7 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/components/app/SessionProvider";
 import { getSupabase } from "@/lib/supabase/client";
-import type { NavSection } from "@/data/app-nav";
+import { APP_NAV, filterNav, type NavSection } from "@/data/app-nav";
 
 function initialsOf(name: string): string {
   const p = (name || "").trim().split(/\s+/);
@@ -47,6 +47,18 @@ export function Sidebar({
   // Prefer the real signed-in firm/user; fall back to the build-time props.
   const effTenantName = (isReal && tenant?.name) || tenantName;
   const effTenantSlug = (isReal && tenant?.slug) || tenantSlug;
+
+  // Re-filter the nav from the REAL firm's enabled addons + the user's real
+  // role, so each office sees exactly what its plan includes (the prop `nav`
+  // was filtered at build time against the neutral "app" shell).
+  const effNav =
+    isReal && tenant
+      ? filterNav(
+          APP_NAV,
+          tenant.enabled_addons ?? [],
+          profile?.role || "admin",
+        )
+      : nav;
   const effUserName = profile?.full_name || userName;
   const effUserRole =
     (profile?.role && ROLE_LABELS[profile.role]) || profile?.role || userRole;
@@ -103,7 +115,7 @@ export function Sidebar({
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto py-3 px-2">
-          {nav.map((sec, sIdx) => (
+          {effNav.map((sec, sIdx) => (
             <div key={sIdx} className="mb-4">
               {sec.title_ar && (
                 <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--text-faint)] px-3 mb-1.5">

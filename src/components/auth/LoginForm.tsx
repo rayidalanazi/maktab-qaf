@@ -13,7 +13,7 @@ import { getSupabase } from "@/lib/supabase/client";
  * (the only fully-seeded mock workspace). Once qaf's own Supabase tables are
  * populated, this will look up users.tenant_id → tenants.slug instead.
  */
-const POST_LOGIN_HREF = "/t/raed";
+const POST_LOGIN_HREF = "/t/app";
 
 export function LoginForm() {
   const router = useRouter();

@@ -167,7 +167,7 @@ export function AdminGate({ children }: { children: ReactNode }) {
             وليست جزءاً من حساب مكتبك.
           </p>
           <div className="space-y-2">
-            <Link href="/t/raed" className="btn btn-brand w-full py-2.5 text-sm">
+            <Link href="/t/app" className="btn btn-brand w-full py-2.5 text-sm">
               ← العودة لمكتبك
             </Link>
             <button onClick={signOutAndRetry} className="btn btn-ghost w-full py-2.5 text-sm">

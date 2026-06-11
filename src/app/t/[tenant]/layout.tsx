@@ -11,8 +11,10 @@ interface LayoutProps {
 }
 
 export async function generateStaticParams() {
-  // Pre-render the dev tenants for static export (GitHub Pages preview).
-  return [{ tenant: "raed" }, { tenant: "alfaisal" }];
+  // "app" = the neutral workspace shell every real signed-in firm routes to
+  // (static hosting can't pre-build a page per firm). raed/alfaisal stay for
+  // the public demo.
+  return [{ tenant: "app" }, { tenant: "raed" }, { tenant: "alfaisal" }];
 }
 
 export default async function TenantLayout({ children, params }: LayoutProps) {

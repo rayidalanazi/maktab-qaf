@@ -17,7 +17,7 @@ interface Props {
   existingFirmName?: string;
 }
 
-const APP_HREF = "/t/raed";
+const APP_HREF = "/t/app";
 
 export function SuccessStep({
   firmNameAr,

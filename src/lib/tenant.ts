@@ -51,8 +51,27 @@ export async function getTenantSlug(
  * this hits `tenants` table with `select * where slug = $1 and status='active'`.
  */
 export async function loadTenantBySlug(slug: string): Promise<TenantContext | null> {
+  // Every addon key referenced in the sidebar nav — used by the neutral "app"
+  // workspace shell so a real firm (whose addons are resolved client-side from
+  // its session) never sees a stripped nav during the static render.
+  const ALL_ADDONS = [
+    "core_cases", "case_timeline_plus", "memos_module", "templates_library",
+    "precedents_engine", "regulations_hub", "schedule_attendance", "documents_vault",
+    "requests_workflow", "invoicing_pro", "expenses_loans", "salaries_payroll",
+    "reports_basic", "kpi_dashboard", "executive_suite",
+  ];
+
   // TODO: replace with real Supabase query
   const KNOWN_DEV_TENANTS: Record<string, Omit<TenantContext, "slug">> = {
+    // Neutral signed-in workspace shell. The URL stays /t/app/ for ALL real
+    // firms (static hosting can't pre-build a page per firm); the actual firm
+    // name + subdomain come from the session (see Sidebar/SessionProvider).
+    app: {
+      id: "app-shell",
+      name: "مكتبك",
+      plan: "bundle_medium",
+      enabledAddons: ALL_ADDONS,
+    },
     raed: {
       id: "dev-tenant-raed",
       name: "شركة رائد للمحاماة",
