@@ -116,9 +116,20 @@ export function AdminGate({ children }: { children: ReactNode }) {
   if (state.kind === "live") {
     return (
       <AdminCtx.Provider value={{ mode: "live", email: state.email }}>
-        <div className="bg-[var(--success)]/10 border-b border-[var(--success)]/30 text-[var(--success)] text-[11px] font-mono px-4 py-1.5 flex items-center gap-2" dir="rtl">
-          <span className="w-1.5 h-1.5 rounded-full bg-[var(--success)] animate-pulse" />
-          بيانات حية — مشغّل المنصة: <span dir="ltr">{state.email}</span>
+        <div className="bg-[var(--success)]/10 border-b border-[var(--success)]/30 text-[var(--success)] text-[11px] font-mono px-4 py-1.5 flex items-center justify-between gap-2" dir="rtl">
+          <span className="flex items-center gap-2 min-w-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--success)] animate-pulse shrink-0" />
+            <span className="truncate">
+              بيانات حية — مشغّل المنصة: <span dir="ltr">{state.email}</span>
+            </span>
+          </span>
+          <button
+            onClick={signOutAndRetry}
+            className="shrink-0 underline hover:no-underline text-[var(--danger)]"
+            title="تسجيل خروج من حساب المشغّل"
+          >
+            ⏻ تسجيل خروج
+          </button>
         </div>
         {children}
       </AdminCtx.Provider>
