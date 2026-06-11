@@ -4,9 +4,11 @@ import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { IdentityStep, type IdentityValues } from "./signup/IdentityStep";
 import { WorkspaceStep, type WorkspaceValues } from "./signup/WorkspaceStep";
-import { SuccessStep } from "./signup/SuccessStep";
+import { SuccessStep, type SuccessVariant } from "./signup/SuccessStep";
 import { getSupabase } from "@/lib/supabase/client";
-import { provisionTenant, PENDING_FIRM_KEY, QafDbError } from "@/lib/data/queries";
+import {
+  fetchMyProfile, fetchMyTenant, provisionTenant, PENDING_FIRM_KEY, QafDbError,
+} from "@/lib/data/queries";
 import type { GoogleSignInResult } from "@/lib/supabase/google-signin";
 
 /** The app shell route. The real firm is resolved from the session on the client. */
@@ -41,6 +43,9 @@ export function SignupWizard() {
   });
   const [pending, startTransition] = useTransition();
   const [serverError, setServerError] = useState<string | null>(null);
+  const [successVariant, setSuccessVariant] = useState<SuccessVariant>("created");
+  const [successEmail, setSuccessEmail] = useState<string>("");
+  const [existingFirmName, setExistingFirmName] = useState<string>("");
 
   // Restore draft from localStorage (password never stored).
   useEffect(() => {
@@ -106,6 +111,28 @@ export function SignupWizard() {
         // (Google sign-in completes earlier and gives us one).
         const { data: sessionData } = await sb.auth.getSession();
         let haveSession = !!sessionData.session;
+        const sessionEmail = sessionData.session?.user.email ?? identity.email;
+
+        // Already signed in AND already owns a firm → no silent reuse:
+        // tell them explicitly and send them to THEIR firm.
+        if (haveSession) {
+          try {
+            const prof = await fetchMyProfile();
+            if (prof?.tenant_id) {
+              const tn = await fetchMyTenant(prof.tenant_id);
+              setExistingFirmName(tn?.name ?? "");
+              setSuccessEmail(sessionEmail);
+              setSuccessVariant("existing");
+              try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+              setStep(3);
+              setTimeout(() => router.replace(APP_SHELL_HREF), 3000);
+              return;
+            }
+          } catch {
+            // DB unreachable → fall through to the normal flow.
+          }
+        }
+
         if (!haveSession) {
           const { data: signUpData, error: signupErr } = await sb.auth.signUp({
             email: identity.email,
@@ -126,45 +153,47 @@ export function SignupWizard() {
 
         // Remember the firm so provisioning completes even if the session isn't
         // ready yet (email-confirmation flow finishes it on first real login).
-        const pending = {
+        const pendingFirm = {
           slug: workspace.subdomain.toLowerCase(),
           name: workspace.firmNameAr,
           fullName: identity.fullName,
         };
         try {
-          localStorage.setItem(PENDING_FIRM_KEY, JSON.stringify(pending));
+          localStorage.setItem(PENDING_FIRM_KEY, JSON.stringify(pendingFirm));
         } catch {
           // ignore
         }
 
-        // If we already have a live session, create the firm right now.
         if (haveSession) {
+          // Live session → create the firm right now.
           try {
             await provisionTenant({
-              slug: pending.slug,
-              name: pending.name,
-              fullName: pending.fullName,
+              slug: pendingFirm.slug,
+              name: pendingFirm.name,
+              fullName: pendingFirm.fullName,
             });
             try { localStorage.removeItem(PENDING_FIRM_KEY); } catch { /* ignore */ }
           } catch (e) {
             // qaf_* not set up yet → keep the pending firm; app runs in demo mode.
             if (!(e instanceof QafDbError && e.notReady)) {
               const msg = e instanceof Error ? e.message : String(e);
-              // Non-fatal: surface but still let them into the app.
               console.warn("provisionTenant failed:", msg);
             }
           }
+          setSuccessVariant("created");
+          try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+          setStep(3);
+          setTimeout(() => router.replace(APP_SHELL_HREF), 3000);
+        } else {
+          // Email confirmation pending → NO redirect into the app (it would show
+          // the demo shell and look like someone else's firm). Show clear
+          // "confirm your email" instructions; lazy provisioning finishes the
+          // firm on their first real login.
+          setSuccessEmail(identity.email);
+          setSuccessVariant("confirm_email");
+          try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+          setStep(3);
         }
-
-        try {
-          localStorage.removeItem(DRAFT_KEY);
-        } catch {
-          // ignore
-        }
-        setStep(3);
-
-        // Auto-redirect into the app shell (real firm resolved from session).
-        setTimeout(() => router.replace(APP_SHELL_HREF), 3000);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         setServerError(`صار خلل: ${msg}`);
@@ -238,6 +267,9 @@ export function SignupWizard() {
         <SuccessStep
           firmNameAr={workspace.firmNameAr}
           subdomain={workspace.subdomain}
+          variant={successVariant}
+          email={successEmail}
+          existingFirmName={existingFirmName}
         />
       )}
 
