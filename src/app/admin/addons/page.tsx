@@ -1,20 +1,45 @@
+"use client";
+
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
+import { useAdminData } from "@/hooks/useAdminData";
+import { fetchAdminTenants } from "@/lib/data/queries";
+import type { AdminTenantRow } from "@/lib/data/types";
 import { ADDONS, CATEGORIES } from "@/data/pricing";
 import { ADMIN_TENANTS } from "@/data/admin-mock";
 
+// Demo fallback — shaped like AdminTenantRow (no addon data in the mock).
+const FALLBACK_TENANTS: AdminTenantRow[] = ADMIN_TENANTS.map((t) => ({
+  id: String(t.id),
+  slug: t.slug,
+  name: t.name,
+  plan: t.plan,
+  status: t.trial ? "trialing" : "active",
+  enabledAddons: [],
+  trialEndsAt: null,
+  createdAt: t.signedUp,
+}));
+
 /**
- * Platform-admin view of every addon: who has it, revenue, adoption.
+ * Platform-admin view of every addon: adoption + revenue.
+ * LIVE: adoption counted from real tenants' enabled_addons.
+ * DEMO: deterministic fake adoption so the showcase looks alive.
  */
 export default function AdminAddonsPage() {
+  const { data: tenants, isLive } = useAdminData(fetchAdminTenants, FALLBACK_TENANTS);
   const byCat = CATEGORIES.slice().sort((a, b) => a.order - b.order);
 
-  // Fake adoption numbers derived deterministically so it looks alive.
-  const adoption = (key: string) => {
+  const demoAdoption = (key: string) => {
     let h = 0;
     for (const c of key) h = (h * 31 + c.charCodeAt(0)) % 97;
-    return Math.max(1, Math.round((h / 97) * ADMIN_TENANTS.length));
+    return Math.max(1, Math.round((h / 97) * Math.max(1, tenants.length)));
   };
+
+  const liveAdoption = (key: string) =>
+    tenants.filter((t) => t.enabledAddons.includes(key)).length;
+
+  const adoption = (key: string) => (isLive ? liveAdoption(key) : demoAdoption(key));
+  const totalTenants = Math.max(1, tenants.length);
 
   return (
     <>
@@ -39,7 +64,7 @@ export default function AdminAddonsPage() {
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {items.map((a) => {
                     const users = adoption(a.key);
-                    const pct = Math.round((users / ADMIN_TENANTS.length) * 100);
+                    const pct = Math.round((users / totalTenants) * 100);
                     return (
                       <div key={a.key} className="card">
                         <div className="flex items-start justify-between gap-2 mb-1">

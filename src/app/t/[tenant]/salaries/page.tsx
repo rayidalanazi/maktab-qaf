@@ -1,39 +1,27 @@
+"use client";
+
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { StatCard } from "@/components/app/StatCard";
+import { useQafData } from "@/hooks/useQafData";
+import { fetchSalaries } from "@/lib/data/queries";
+import type { SalaryItem } from "@/lib/data/types";
 
-type PayStatus = "مدفوع" | "معلّق";
-
-interface Employee {
-  name: string;
-  role: string;
-  base: number;
-  allowances: number;
-  deductions: number;
-  status: PayStatus;
-}
-
-const EMPLOYEES: Employee[] = [
-  { name: "أحمد بن سعد الدوسري", role: "محامٍ أول", base: 22000, allowances: 4500, deductions: 1200, status: "مدفوع" },
-  { name: "نورة عبدالله القحطاني", role: "محامية", base: 16000, allowances: 3000, deductions: 850, status: "مدفوع" },
-  { name: "خالد محمد العتيبي", role: "مستشار قانوني", base: 18500, allowances: 3500, deductions: 980, status: "معلّق" },
-  { name: "ريم فهد الشمري", role: "باحثة قانونية", base: 11000, allowances: 1800, deductions: 540, status: "مدفوع" },
-  { name: "عبدالعزيز ناصر الحربي", role: "مدير المكتب", base: 20000, allowances: 5000, deductions: 1100, status: "مدفوع" },
-  { name: "سارة إبراهيم الزهراني", role: "سكرتيرة تنفيذية", base: 8500, allowances: 1200, deductions: 380, status: "معلّق" },
-  { name: "ماجد طلال المطيري", role: "كاتب ضبط", base: 7500, allowances: 900, deductions: 300, status: "مدفوع" },
+// Demo fallback (shown only when no firm/DB yet). Shaped like SalaryItem.
+const FALLBACK_SALARIES: SalaryItem[] = [
+  { id: 1, name: "أحمد بن سعد الدوسري", role: "محامٍ أول", base: 22000, allowances: 4500, deductions: 1200, status: "مدفوع", month: "2026-05" },
+  { id: 2, name: "نورة عبدالله القحطاني", role: "محامية", base: 16000, allowances: 3000, deductions: 850, status: "مدفوع", month: "2026-05" },
+  { id: 3, name: "خالد محمد العتيبي", role: "مستشار قانوني", base: 18500, allowances: 3500, deductions: 980, status: "معلّق", month: "2026-05" },
+  { id: 4, name: "ريم فهد الشمري", role: "باحثة قانونية", base: 11000, allowances: 1800, deductions: 540, status: "مدفوع", month: "2026-05" },
+  { id: 5, name: "عبدالعزيز ناصر الحربي", role: "مدير المكتب", base: 20000, allowances: 5000, deductions: 1100, status: "مدفوع", month: "2026-05" },
+  { id: 6, name: "سارة إبراهيم الزهراني", role: "سكرتيرة تنفيذية", base: 8500, allowances: 1200, deductions: 380, status: "معلّق", month: "2026-05" },
+  { id: 7, name: "ماجد طلال المطيري", role: "كاتب ضبط", base: 7500, allowances: 900, deductions: 300, status: "مدفوع", month: "2026-05" },
 ];
 
 const fmt = (n: number) => n.toLocaleString("en-US");
-const net = (e: Employee) => e.base + e.allowances - e.deductions;
+const net = (e: SalaryItem) => e.base + e.allowances - e.deductions;
 
-const totalNet = EMPLOYEES.reduce((s, e) => s + net(e), 0);
-const headcount = EMPLOYEES.length;
-const paidTotal = EMPLOYEES.filter((e) => e.status === "مدفوع").reduce((s, e) => s + net(e), 0);
-const pendingTotal = EMPLOYEES.filter((e) => e.status === "معلّق").reduce((s, e) => s + net(e), 0);
-const paidCount = EMPLOYEES.filter((e) => e.status === "مدفوع").length;
-const pendingCount = EMPLOYEES.filter((e) => e.status === "معلّق").length;
-
-function statusStyle(status: PayStatus) {
+function statusStyle(status: string) {
   const c = status === "مدفوع" ? "var(--success)" : "var(--warn)";
   return {
     background: `color-mix(in srgb, ${c} 15%, transparent)`,
@@ -41,8 +29,15 @@ function statusStyle(status: PayStatus) {
   };
 }
 
-export default async function SalariesPage({ params }: { params: Promise<{ tenant: string }> }) {
-  await params;
+export default function SalariesPage() {
+  const { data: employees } = useQafData(fetchSalaries, FALLBACK_SALARIES);
+
+  const totalNet = employees.reduce((s, e) => s + net(e), 0);
+  const headcount = employees.length;
+  const paidTotal = employees.filter((e) => e.status === "مدفوع").reduce((s, e) => s + net(e), 0);
+  const pendingTotal = employees.filter((e) => e.status === "معلّق").reduce((s, e) => s + net(e), 0);
+  const paidCount = employees.filter((e) => e.status === "مدفوع").length;
+  const pendingCount = employees.filter((e) => e.status === "معلّق").length;
 
   return (
     <>
@@ -112,9 +107,9 @@ export default async function SalariesPage({ params }: { params: Promise<{ tenan
               </tr>
             </thead>
             <tbody>
-              {EMPLOYEES.map((e, i) => (
+              {employees.map((e) => (
                 <tr
-                  key={i}
+                  key={e.id}
                   className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-hover)] transition-colors"
                 >
                   <td className="px-4 py-3 font-medium text-[var(--text)] whitespace-nowrap">
@@ -154,17 +149,17 @@ export default async function SalariesPage({ params }: { params: Promise<{ tenan
                 </td>
                 <td className="px-4 py-3 text-left text-[var(--text-muted)]">
                   <span className="num" dir="ltr">
-                    {fmt(EMPLOYEES.reduce((s, e) => s + e.base, 0))}
+                    {fmt(employees.reduce((s, e) => s + e.base, 0))}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-left" style={{ color: "var(--success)" }}>
                   <span className="num" dir="ltr">
-                    +{fmt(EMPLOYEES.reduce((s, e) => s + e.allowances, 0))}
+                    +{fmt(employees.reduce((s, e) => s + e.allowances, 0))}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-left" style={{ color: "var(--danger)" }}>
                   <span className="num" dir="ltr">
-                    −{fmt(EMPLOYEES.reduce((s, e) => s + e.deductions, 0))}
+                    −{fmt(employees.reduce((s, e) => s + e.deductions, 0))}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-left text-[var(--brand)]">

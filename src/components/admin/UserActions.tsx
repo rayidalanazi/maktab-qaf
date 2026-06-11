@@ -8,6 +8,8 @@ interface Props {
   userName: string;
   tenantName: string;
   status: string;
+  /** LIVE mode: persists suspend/restore to the backend. Demo (undefined) stays local-only. */
+  onSetStatus?: (status: "suspended" | "active") => Promise<void> | void;
 }
 
 const ROLES = [
@@ -15,7 +17,7 @@ const ROLES = [
   "محامي", "مستشار", "محاسب", "مسوّق", "مدقق", "سكرتارية",
 ];
 
-export function UserActions({ userName, tenantName, status }: Props) {
+export function UserActions({ userName, tenantName, status, onSetStatus }: Props) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [roleOpen, setRoleOpen] = useState(false);
@@ -40,12 +42,24 @@ export function UserActions({ userName, tenantName, status }: Props) {
     setConfirm(null);
   }
 
+  /** Suspend/restore: persists via onSetStatus in LIVE mode, local-only toast in demo. */
+  function setStatusAndToast(next: "suspended" | "active", key: string, msg: string, kind: "success" | "warn" = "success") {
+    if (!onSetStatus) { act(key, msg, kind); return; }
+    void Promise.resolve(onSetStatus(next))
+      .then(() => act(key, msg, kind))
+      .catch((e) => {
+        toast(e instanceof Error ? e.message : String(e), "warn");
+        setOpen(false);
+        setConfirm(null);
+      });
+  }
+
   const items = [
     { key: "role", label: "تغيير الدور", icon: "🎭", onClick: () => { setOpen(false); setRoleOpen(true); } },
     { key: "reset", label: "إرسال إعادة تعيين كلمة المرور", icon: "🔑", onClick: () => act("reset", `أُرسل رابط إعادة التعيين لـ ${userName}`) },
     { key: "impersonate", label: "الدخول كـ هذا المستخدم", icon: "🕵", onClick: () => act("impersonate", `دخول كـ ${userName} (سُجّل في التدقيق)`) },
     disabled
-      ? { key: "enable", label: "إعادة التفعيل", icon: "✅", onClick: () => act("enable", `تم تفعيل ${userName}`) }
+      ? { key: "enable", label: "إعادة التفعيل", icon: "✅", onClick: () => setStatusAndToast("active", "enable", `تم تفعيل ${userName}`) }
       : { key: "disable", label: "تعطيل الحساب", icon: "⏸", danger: true,
           onClick: () => { setOpen(false); setConfirm({ key: "disable", title: "تعطيل الحساب؟", body: `سيُمنع ${userName} من الدخول. يمكن إعادة تفعيله لاحقاً.`, danger: true }); } },
     { key: "remove", label: "إزالة من المكتب", icon: "🗑", danger: true,
@@ -104,7 +118,12 @@ export function UserActions({ userName, tenantName, status }: Props) {
           <>
             <button onClick={() => setConfirm(null)} className="btn btn-ghost text-sm py-2.5">تراجع</button>
             <button
-              onClick={() => confirm && act(confirm.key, `تم: ${confirm.title.replace("؟", "")} — ${userName}`, "warn")}
+              onClick={() => {
+                if (!confirm) return;
+                const msg = `تم: ${confirm.title.replace("؟", "")} — ${userName}`;
+                if (confirm.key === "disable") setStatusAndToast("suspended", "disable", msg, "warn");
+                else act(confirm.key, msg, "warn");
+              }}
               className="btn btn-ghost text-sm py-2.5 border-[var(--danger)] text-[var(--danger)]"
             >
               تأكيد

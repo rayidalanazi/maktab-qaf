@@ -1,16 +1,80 @@
+"use client";
+
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { StatCard } from "@/components/app/StatCard";
+import { useAdminData } from "@/hooks/useAdminData";
+import {
+  fetchAdminTenants,
+  fetchAdminUsers,
+  fetchAdminPayments,
+} from "@/lib/data/queries";
+import type {
+  AdminTenantRow,
+  AdminUserRow,
+  AdminPaymentRow,
+} from "@/lib/data/types";
 import {
   ADMIN_TENANTS,
+  ADMIN_USERS,
   ADMIN_REVENUE_BY_MONTH,
   ADMIN_RECENT_EVENTS,
 } from "@/data/admin-mock";
 
+// Demo fallbacks — admin-mock arrays reshaped into the real admin row shapes.
+const FALLBACK_TENANTS: AdminTenantRow[] = ADMIN_TENANTS.map((t) => ({
+  id: String(t.id),
+  slug: t.slug,
+  name: t.name,
+  plan: t.plan,
+  status: t.trial
+    ? "trialing"
+    : t.status === "نشط"
+      ? "active"
+      : t.status === "متأخر دفع"
+        ? "past_due"
+        : "suspended",
+  enabledAddons: [],
+  trialEndsAt: null,
+  createdAt: t.signedUp,
+}));
+
+const FALLBACK_USERS: AdminUserRow[] = ADMIN_USERS.map((u) => ({
+  id: String(u.id),
+  name: u.name,
+  email: u.email,
+  role: u.roleKey,
+  status: u.status === "نشط" ? "active" : u.status === "معطل" ? "disabled" : "invited",
+  tenantId: u.tenantSlug,
+  lastSeen: u.lastLogin,
+  createdAt: u.createdAt,
+}));
+
+const FALLBACK_PAYMENTS: AdminPaymentRow[] = ADMIN_TENANTS
+  .filter((t) => t.mrr > 0)
+  .map((t) => ({
+    id: `pay-${t.id}`,
+    tenantId: String(t.id),
+    amount: t.mrr,
+    status: "paid",
+    paymentType: "subscription",
+    paidAt: "2026-06-01",
+    createdAt: "2026-06-01",
+  }));
+
 export default function AdminHome() {
-  const totalMRR = ADMIN_TENANTS.reduce((s, t) => s + t.mrr, 0);
-  const activeTenants = ADMIN_TENANTS.filter((t) => t.status === "نشط").length;
-  const trialTenants = ADMIN_TENANTS.filter((t) => t.trial).length;
+  const { data: tenants } = useAdminData(fetchAdminTenants, FALLBACK_TENANTS);
+  const { data: users } = useAdminData(fetchAdminUsers, FALLBACK_USERS);
+  const { data: payments } = useAdminData(fetchAdminPayments, FALLBACK_PAYMENTS);
+
+  const totalFirms = tenants.length;
+  const activeTenants = tenants.filter((t) => t.status === "active").length;
+  const trialTenants = tenants.filter((t) => t.status === "trialing").length;
+  const suspendedTenants = tenants.filter((t) => t.status === "suspended").length;
+  const totalUsers = users.length;
+  const totalMRR = payments
+    .filter((p) => p.status === "paid")
+    .reduce((s, p) => s + p.amount, 0);
   const arr = totalMRR * 12;
   const last = ADMIN_REVENUE_BY_MONTH[ADMIN_REVENUE_BY_MONTH.length - 1];
   const prev = ADMIN_REVENUE_BY_MONTH[ADMIN_REVENUE_BY_MONTH.length - 2];
@@ -22,7 +86,7 @@ export default function AdminHome() {
       <main className="p-4 sm:p-6 max-w-7xl w-full">
         <PageHeader
           title="نظرة عامة"
-          sub={`${activeTenants} مكتب نشط • ${trialTenants} في التجربة • ${(arr / 1000).toFixed(1)}K ر.س ARR`}
+          sub={`${totalFirms} مكتب • ${activeTenants} نشط • ${trialTenants} في التجربة • ${suspendedTenants} معلّق • ${totalUsers} مستخدم • ${(arr / 1000).toFixed(1)}K ر.س ARR`}
         />
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">

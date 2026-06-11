@@ -1,81 +1,22 @@
+"use client";
+
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { StatCard } from "@/components/app/StatCard";
+import { useQafData } from "@/hooks/useQafData";
+import { fetchMemos } from "@/lib/data/queries";
+import type { MemoItem } from "@/lib/data/types";
 
 type MemoStatus = "draft" | "audit" | "legal" | "approved" | "published";
 
-interface Memo {
-  id: string;
-  title: string;
-  caseTitle: string;
-  caseRef: string;
-  author: string;
-  status: MemoStatus;
-  due: string;
-  stage: number; // 1..5
-}
-
-const MEMOS: Memo[] = [
-  {
-    id: "MEMO-2026-041",
-    title: "مذكرة دفاع في دعوى مطالبة مالية",
-    caseTitle: "شركة الأفق التجارية ضد مؤسسة النخبة",
-    caseRef: "ق-1447-0312",
-    author: "أ. سلطان القحطاني",
-    status: "draft",
-    due: "2026-06-18",
-    stage: 1,
-  },
-  {
-    id: "MEMO-2026-039",
-    title: "لائحة اعتراضية على حكم ابتدائي",
-    caseTitle: "خالد بن فهد العتيبي ضد البنك الوطني",
-    caseRef: "ق-1447-0298",
-    author: "أ. نورة الدوسري",
-    status: "audit",
-    due: "2026-06-15",
-    stage: 2,
-  },
-  {
-    id: "MEMO-2026-037",
-    title: "مذكرة رد على لائحة المدعى عليه",
-    caseTitle: "مؤسسة بناء المستقبل ضد مقاولات الراجحي",
-    caseRef: "ق-1447-0271",
-    author: "أ. عبدالعزيز الشمري",
-    status: "legal",
-    due: "2026-06-13",
-    stage: 3,
-  },
-  {
-    id: "MEMO-2026-034",
-    title: "مذكرة طلب تنفيذ حكم نهائي",
-    caseTitle: "ورثة المرحوم محمد السبيعي",
-    caseRef: "ق-1447-0244",
-    author: "أ. ريم الغامدي",
-    status: "approved",
-    due: "2026-06-11",
-    stage: 4,
-  },
-  {
-    id: "MEMO-2026-030",
-    title: "لائحة دعوى عمالية — مستحقات نهاية الخدمة",
-    caseTitle: "ماجد الحربي ضد شركة الإنشاءات الحديثة",
-    caseRef: "ق-1447-0219",
-    author: "أ. سلطان القحطاني",
-    status: "published",
-    due: "2026-06-08",
-    stage: 5,
-  },
-  {
-    id: "MEMO-2026-028",
-    title: "مذكرة إجابة في نزاع أحوال شخصية",
-    caseTitle: "سارة العنزي ضد طلال المطيري",
-    caseRef: "ق-1447-0203",
-    author: "أ. نورة الدوسري",
-    status: "audit",
-    due: "2026-06-20",
-    stage: 2,
-  },
+// Demo fallback (shown only when no firm/DB yet). Shaped like MemoItem.
+const FALLBACK_MEMOS: MemoItem[] = [
+  { id: "MEMO-2026-041", title: "مذكرة دفاع في دعوى مطالبة مالية", type: "مذكرة", status: "draft", author: "أ. سلطان القحطاني", due: "2026-06-18" },
+  { id: "MEMO-2026-039", title: "لائحة اعتراضية على حكم ابتدائي", type: "لائحة", status: "audit", author: "أ. نورة الدوسري", due: "2026-06-15" },
+  { id: "MEMO-2026-037", title: "مذكرة رد على لائحة المدعى عليه", type: "مذكرة", status: "legal", author: "أ. عبدالعزيز الشمري", due: "2026-06-13" },
+  { id: "MEMO-2026-034", title: "مذكرة طلب تنفيذ حكم نهائي", type: "مذكرة", status: "approved", author: "أ. ريم الغامدي", due: "2026-06-11" },
+  { id: "MEMO-2026-030", title: "لائحة دعوى عمالية — مستحقات نهاية الخدمة", type: "لائحة", status: "published", author: "أ. سلطان القحطاني", due: "2026-06-08" },
+  { id: "MEMO-2026-028", title: "مذكرة إجابة في نزاع أحوال شخصية", type: "مذكرة", status: "audit", author: "أ. نورة الدوسري", due: "2026-06-20" },
 ];
 
 const STATUS_META: Record<
@@ -97,8 +38,17 @@ const WORKFLOW: { key: MemoStatus; label: string }[] = [
   { key: "published", label: "منشور" },
 ];
 
-function StatusBadge({ status }: { status: MemoStatus }) {
-  const meta = STATUS_META[status];
+function metaOf(status: string) {
+  return STATUS_META[status as MemoStatus] ?? STATUS_META.draft;
+}
+
+function stageOf(status: string): number {
+  const i = WORKFLOW.findIndex((w) => w.key === status);
+  return i === -1 ? 1 : i + 1;
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const meta = metaOf(status);
   return (
     <span
       className="pill text-xs whitespace-nowrap inline-flex items-center gap-1.5"
@@ -117,16 +67,11 @@ function StatusBadge({ status }: { status: MemoStatus }) {
   );
 }
 
-function count(status: MemoStatus) {
-  return MEMOS.filter((m) => m.status === status).length;
-}
+export default function MemosPage() {
+  const { data: memos } = useQafData(fetchMemos, FALLBACK_MEMOS);
 
-export default async function MemosPage({
-  params,
-}: {
-  params: Promise<{ tenant: string }>;
-}) {
-  await params;
+  const count = (status: MemoStatus) =>
+    memos.filter((m) => m.status === status).length;
 
   return (
     <>
@@ -196,7 +141,7 @@ export default async function MemosPage({
               </tr>
             </thead>
             <tbody>
-              {MEMOS.map((m) => (
+              {memos.map((m) => (
                 <tr
                   key={m.id}
                   className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-hover)] transition-colors"
@@ -211,10 +156,7 @@ export default async function MemosPage({
                   </td>
                   <td className="px-4 py-3 align-top">
                     <div className="text-[var(--text)] max-w-[240px] break-words">
-                      {m.caseTitle}
-                    </div>
-                    <div className="text-[11px] text-[var(--text-faint)] num" dir="ltr">
-                      {m.caseRef}
+                      —
                     </div>
                   </td>
                   <td className="px-4 py-3 align-top whitespace-nowrap text-[var(--text-muted)]">
@@ -236,7 +178,7 @@ export default async function MemosPage({
 
         {/* Memos cards — mobile */}
         <div className="grid grid-cols-1 gap-3 md:hidden">
-          {MEMOS.map((m) => (
+          {memos.map((m) => (
             <div key={m.id} className="card">
               <div className="flex items-start justify-between gap-2 mb-2">
                 <h3 className="font-medium text-[var(--text)] break-words min-w-0">
@@ -245,10 +187,10 @@ export default async function MemosPage({
                 <StatusBadge status={m.status} />
               </div>
               <div className="text-sm text-[var(--text-muted)] break-words mb-1">
-                {m.caseTitle}
+                —
               </div>
               <div className="text-[11px] text-[var(--text-faint)] num mb-3" dir="ltr">
-                {m.id} · {m.caseRef}
+                {m.id}
               </div>
 
               {/* mini workflow tracker */}
@@ -259,8 +201,8 @@ export default async function MemosPage({
                     className="h-1.5 flex-1 rounded-full"
                     style={{
                       background:
-                        i < m.stage
-                          ? STATUS_META[m.status].dot
+                        i < stageOf(m.status)
+                          ? metaOf(m.status).dot
                           : "var(--border)",
                     }}
                   />

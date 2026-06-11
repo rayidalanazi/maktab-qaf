@@ -11,6 +11,8 @@ import { getSupabase } from "@/lib/supabase/client";
 import type {
   Case, DocItem, EventItem, TaskItem, UserItem, NotificationItem,
   InvoiceItem, ExpenseItem, ClientItem, MemoItem, QafProfile, QafTenant,
+  AttendanceItem, RequestItem, SalaryItem, TicketItem,
+  AdminTenantRow, AdminUserRow, AdminGrantRow, AdminPaymentRow,
 } from "./types";
 
 /** Thrown shape is normalised so hooks can decide demo-fallback vs real-empty. */
@@ -321,4 +323,307 @@ export async function fetchMemos(): Promise<MemoItem[]> {
     author: r.author_name ?? "",
     due: r.due_date ?? "",
   }));
+}
+
+// ---------------------------------------------------------------- archived cases
+export async function fetchArchivedCases(): Promise<Case[]> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from("qaf_cases")
+    .select("*")
+    .or("status.eq.won,status.eq.lost,status.eq.settled,status.eq.withdrawn,status.eq.archived,archived_at.not.is.null")
+    .order("created_at", { ascending: false });
+  wrap(error);
+  return (data ?? []).map((r): Case => ({
+    id: r.id,
+    name: r.case_number,
+    court: r.court ?? "",
+    type: r.case_type ?? "",
+    plaintiff: r.plaintiff ?? "",
+    defendant: r.defendant ?? "",
+    status: r.status_label ?? "مغلق",
+    action: r.current_action ?? "",
+    deadline: r.deadline ?? "",
+    risk: r.risk_score ?? 0,
+    assignedTo: r.assigned_to_name ?? "",
+  }));
+}
+
+// ---------------------------------------------------------------- attendance
+export async function fetchAttendance(): Promise<AttendanceItem[]> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from("qaf_attendance")
+    .select("*")
+    .order("att_date", { ascending: false })
+    .order("employee_name", { ascending: true })
+    .limit(50);
+  wrap(error);
+  // Show the latest recorded day only (today's sheet).
+  const rows = data ?? [];
+  const latest = rows[0]?.att_date;
+  return rows
+    .filter((r) => r.att_date === latest)
+    .map((r): AttendanceItem => ({
+      id: r.id,
+      name: r.employee_name,
+      role: r.role_title ?? "",
+      status: r.status ?? "present",
+      checkIn: r.check_in ?? "—",
+      commitment: r.commitment_pct ?? 100,
+    }));
+}
+
+// ---------------------------------------------------------------- requests
+export async function fetchRequests(): Promise<RequestItem[]> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from("qaf_requests")
+    .select("*")
+    .order("submitted_at", { ascending: false });
+  wrap(error);
+  return (data ?? []).map((r): RequestItem => ({
+    id: r.id,
+    code: r.req_code,
+    employee: r.employee_name,
+    role: r.role_title ?? "",
+    type: r.req_type,
+    period: r.period_label ?? "",
+    reason: r.reason ?? "",
+    amount: r.amount_label ?? undefined,
+    submitted: r.submitted_at ?? "",
+    status: r.status ?? "بانتظار الموافقة",
+  }));
+}
+
+/** Approve or reject an internal request (admin/GM in the firm). */
+export async function decideRequest(id: string | number, approve: boolean): Promise<void> {
+  const sb = getSupabase();
+  const { error } = await sb
+    .from("qaf_requests")
+    .update({ status: approve ? "معتمدة" : "مرفوضة", decided_at: new Date().toISOString() })
+    .eq("id", id);
+  wrap(error);
+}
+
+// ---------------------------------------------------------------- salaries
+export async function fetchSalaries(): Promise<SalaryItem[]> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from("qaf_salaries")
+    .select("*")
+    .order("base_sar", { ascending: false });
+  wrap(error);
+  return (data ?? []).map((r): SalaryItem => ({
+    id: r.id,
+    name: r.employee_name,
+    role: r.role_title ?? "",
+    base: r.base_sar ?? 0,
+    allowances: r.allowances_sar ?? 0,
+    deductions: r.deductions_sar ?? 0,
+    status: r.status ?? "معلّق",
+    month: r.pay_month ?? "",
+  }));
+}
+
+// ---------------------------------------------------------------- support tickets
+export async function fetchTickets(): Promise<TicketItem[]> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from("qaf_support_tickets")
+    .select("*")
+    .order("created_at", { ascending: false });
+  wrap(error);
+  return (data ?? []).map((r): TicketItem => ({
+    id: r.id,
+    subject: r.subject,
+    body: r.body ?? "",
+    priority: r.priority ?? "عادية",
+    status: r.status ?? "open",
+    requester: r.requester_name ?? "",
+    created: (r.created_at ?? "").slice(0, 10),
+  }));
+}
+
+/** File a new support ticket from the tenant app. */
+export async function createTicket(args: {
+  subject: string; body: string; priority?: string; requester?: string;
+}): Promise<void> {
+  const sb = getSupabase();
+  const { data: prof } = await sb.from("qaf_users").select("tenant_id, full_name").limit(1).maybeSingle();
+  if (!prof?.tenant_id) throw new QafDbError("no tenant", false);
+  const { error } = await sb.from("qaf_support_tickets").insert({
+    tenant_id: prof.tenant_id,
+    subject: args.subject,
+    body: args.body,
+    priority: args.priority ?? "عادية",
+    requester_name: args.requester ?? prof.full_name ?? "",
+  });
+  wrap(error);
+}
+
+// =============================================================================
+// PLATFORM ADMIN (operator) — live cross-tenant reads + control actions.
+// RLS only returns cross-tenant rows when auth.uid() ∈ qaf_platform_admins.
+// =============================================================================
+
+/** True when the signed-in user is a platform admin (operator of قاف). */
+export async function isPlatformAdmin(): Promise<boolean> {
+  const sb = getSupabase();
+  const { data: sess } = await sb.auth.getSession();
+  if (!sess.session) return false;
+  const { data, error } = await sb.rpc("qaf_is_platform_admin");
+  if (error) return false;
+  return data === true;
+}
+
+export async function fetchAdminTenants(): Promise<AdminTenantRow[]> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from("qaf_tenants")
+    .select("*")
+    .order("created_at", { ascending: false });
+  wrap(error);
+  return (data ?? []).map((r): AdminTenantRow => ({
+    id: r.id,
+    slug: r.slug,
+    name: r.name,
+    plan: r.plan ?? "bundle_base",
+    status: r.status ?? "trialing",
+    enabledAddons: r.enabled_addons ?? [],
+    trialEndsAt: r.trial_ends_at ? r.trial_ends_at.slice(0, 10) : null,
+    createdAt: (r.created_at ?? "").slice(0, 10),
+  }));
+}
+
+export async function fetchAdminUsers(): Promise<AdminUserRow[]> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from("qaf_users")
+    .select("*")
+    .order("created_at", { ascending: false });
+  wrap(error);
+  return (data ?? []).map((r): AdminUserRow => ({
+    id: r.id,
+    name: r.full_name,
+    email: r.email,
+    role: r.role,
+    status: r.status,
+    tenantId: r.tenant_id,
+    lastSeen: r.last_seen_at ? r.last_seen_at.slice(0, 10) : "—",
+    createdAt: (r.created_at ?? "").slice(0, 10),
+  }));
+}
+
+export async function fetchAdminGrants(): Promise<AdminGrantRow[]> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from("qaf_grants")
+    .select("*")
+    .order("created_at", { ascending: false });
+  wrap(error);
+  return (data ?? []).map((r): AdminGrantRow => ({
+    id: r.id,
+    tenantId: r.tenant_id,
+    grantType: r.grant_type,
+    label: r.label,
+    addonKey: r.addon_key,
+    startsAt: r.starts_at ?? "",
+    expiresAt: r.expires_at,
+    autoConvert: !!r.auto_convert,
+    reason: r.reason ?? "",
+    status: r.status ?? "active",
+  }));
+}
+
+export async function fetchAdminPayments(): Promise<AdminPaymentRow[]> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from("qaf_payments")
+    .select("*")
+    .order("created_at", { ascending: false });
+  wrap(error);
+  return (data ?? []).map((r): AdminPaymentRow => ({
+    id: r.id,
+    tenantId: r.tenant_id,
+    amount: r.amount_sar ?? 0,
+    status: r.status ?? "paid",
+    paymentType: r.payment_type ?? "subscription",
+    paidAt: r.paid_at ? r.paid_at.slice(0, 10) : null,
+    createdAt: (r.created_at ?? "").slice(0, 10),
+  }));
+}
+
+/**
+ * THE headline admin action: grant a firm a free feature for a limited time.
+ * Inserts a grant record AND enables the addon on the tenant immediately.
+ */
+export async function grantFeature(args: {
+  tenantId: string;
+  addonKey: string;
+  label: string;
+  expiresAt?: string | null; // YYYY-MM-DD or null = permanent
+  reason?: string;
+  grantType?: string;
+}): Promise<void> {
+  const sb = getSupabase();
+  const { error: gErr } = await sb.from("qaf_grants").insert({
+    tenant_id: args.tenantId,
+    grant_type: args.grantType ?? "free_addon",
+    label: args.label,
+    addon_key: args.addonKey,
+    expires_at: args.expiresAt ?? null,
+    reason: args.reason ?? "",
+    status: "active",
+  });
+  wrap(gErr);
+
+  // Enable the addon on the tenant (idempotent append).
+  const { data: t, error: tErr } = await sb
+    .from("qaf_tenants").select("enabled_addons").eq("id", args.tenantId).maybeSingle();
+  wrap(tErr);
+  const current: string[] = t?.enabled_addons ?? [];
+  if (!current.includes(args.addonKey)) {
+    const { error: uErr } = await sb
+      .from("qaf_tenants")
+      .update({ enabled_addons: [...current, args.addonKey], updated_at: new Date().toISOString() })
+      .eq("id", args.tenantId);
+    wrap(uErr);
+  }
+}
+
+export async function setTenantPlan(tenantId: string, plan: string): Promise<void> {
+  const sb = getSupabase();
+  const { error } = await sb
+    .from("qaf_tenants")
+    .update({ plan, updated_at: new Date().toISOString() })
+    .eq("id", tenantId);
+  wrap(error);
+}
+
+export async function setTenantStatus(tenantId: string, status: string): Promise<void> {
+  const sb = getSupabase();
+  const { error } = await sb
+    .from("qaf_tenants")
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq("id", tenantId);
+  wrap(error);
+}
+
+export async function setUserStatus(userId: string, status: string): Promise<void> {
+  const sb = getSupabase();
+  const { error } = await sb
+    .from("qaf_users")
+    .update({ status })
+    .eq("id", userId);
+  wrap(error);
+}
+
+export async function expireGrant(grantId: string): Promise<void> {
+  const sb = getSupabase();
+  const { error } = await sb
+    .from("qaf_grants")
+    .update({ status: "expired" })
+    .eq("id", grantId);
+  wrap(error);
 }

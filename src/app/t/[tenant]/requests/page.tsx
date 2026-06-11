@@ -1,25 +1,18 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { StatCard } from "@/components/app/StatCard";
+import { useQafData } from "@/hooks/useQafData";
+import { fetchRequests, decideRequest } from "@/lib/data/queries";
+import type { RequestItem } from "@/lib/data/types";
 
-type RequestType = "إجازة سنوية" | "إجازة مرضية" | "سلفة" | "عُهدة";
-type RequestStatus = "بانتظار الموافقة" | "معتمدة" | "مرفوضة";
-
-interface InternalRequest {
-  id: string;
-  employee: string;
-  role: string;
-  type: RequestType;
-  period: string;
-  reason: string;
-  submitted: string;
-  status: RequestStatus;
-  amount?: string;
-}
-
-const REQUESTS: InternalRequest[] = [
+// Demo fallback (shown only when no firm/DB yet). Shaped like RequestItem.
+const FALLBACK_REQUESTS: RequestItem[] = [
   {
     id: "REQ-1042",
+    code: "REQ-1042",
     employee: "نورة العتيبي",
     role: "محامية مترافعة",
     type: "إجازة سنوية",
@@ -30,6 +23,7 @@ const REQUESTS: InternalRequest[] = [
   },
   {
     id: "REQ-1041",
+    code: "REQ-1041",
     employee: "خالد الشهري",
     role: "مستشار قانوني",
     type: "سلفة",
@@ -41,6 +35,7 @@ const REQUESTS: InternalRequest[] = [
   },
   {
     id: "REQ-1040",
+    code: "REQ-1040",
     employee: "ريم القحطاني",
     role: "باحثة قانونية",
     type: "عُهدة",
@@ -52,6 +47,7 @@ const REQUESTS: InternalRequest[] = [
   },
   {
     id: "REQ-1039",
+    code: "REQ-1039",
     employee: "سعد المالكي",
     role: "محامٍ تحت التدريب",
     type: "إجازة مرضية",
@@ -62,6 +58,7 @@ const REQUESTS: InternalRequest[] = [
   },
   {
     id: "REQ-1038",
+    code: "REQ-1038",
     employee: "هند الدوسري",
     role: "مديرة العقود",
     type: "إجازة سنوية",
@@ -72,6 +69,7 @@ const REQUESTS: InternalRequest[] = [
   },
   {
     id: "REQ-1037",
+    code: "REQ-1037",
     employee: "فيصل الحربي",
     role: "محاسب المكتب",
     type: "سلفة",
@@ -83,21 +81,21 @@ const REQUESTS: InternalRequest[] = [
   },
 ];
 
-const STATUS_STYLE: Record<RequestStatus, { var: string; label: string }> = {
+const STATUS_STYLE: Record<string, { var: string; label: string }> = {
   "بانتظار الموافقة": { var: "--warn", label: "بانتظار الموافقة" },
   معتمدة: { var: "--success", label: "معتمدة" },
   مرفوضة: { var: "--danger", label: "مرفوضة" },
 };
 
-const TYPE_ICON: Record<RequestType, string> = {
+const TYPE_ICON: Record<string, string> = {
   "إجازة سنوية": "🌴",
   "إجازة مرضية": "🩺",
   سلفة: "💸",
   عُهدة: "📦",
 };
 
-function StatusBadge({ status }: { status: RequestStatus }) {
-  const s = STATUS_STYLE[status];
+function StatusBadge({ status }: { status: string }) {
+  const s = STATUS_STYLE[status] ?? { var: "--info", label: status };
   return (
     <span
       className="pill text-[11px] whitespace-nowrap"
@@ -112,12 +110,22 @@ function StatusBadge({ status }: { status: RequestStatus }) {
   );
 }
 
-function ActionButtons() {
+function ActionButtons({
+  onApprove,
+  onReject,
+  disabled,
+}: {
+  onApprove: () => void;
+  onReject: () => void;
+  disabled: boolean;
+}) {
   return (
     <div className="flex items-center gap-2">
       <button
         type="button"
-        className="btn text-xs py-1.5 px-3 whitespace-nowrap"
+        onClick={onApprove}
+        disabled={disabled}
+        className="btn text-xs py-1.5 px-3 whitespace-nowrap disabled:opacity-50"
         style={{
           background: `color-mix(in srgb, var(--success) 14%, transparent)`,
           color: "var(--success)",
@@ -128,7 +136,9 @@ function ActionButtons() {
       </button>
       <button
         type="button"
-        className="btn text-xs py-1.5 px-3 whitespace-nowrap"
+        onClick={onReject}
+        disabled={disabled}
+        className="btn text-xs py-1.5 px-3 whitespace-nowrap disabled:opacity-50"
         style={{
           background: `color-mix(in srgb, var(--danger) 14%, transparent)`,
           color: "var(--danger)",
@@ -141,18 +151,50 @@ function ActionButtons() {
   );
 }
 
-export default async function RequestsPage({
-  params,
-}: {
-  params: Promise<{ tenant: string }>;
-}) {
-  await params;
+export default function RequestsPage() {
+  const { data, isDemo } = useQafData(fetchRequests, FALLBACK_REQUESTS);
 
-  const pendingCount = REQUESTS.filter(
+  // Local copy of the rows so approve/reject can update optimistically.
+  const [rows, setRows] = useState<RequestItem[]>(data);
+  useEffect(() => {
+    setRows(data);
+  }, [data]);
+
+  const [pendingId, setPendingId] = useState<string | number | null>(null);
+  const [actionError, setActionError] = useState<{
+    id: string | number;
+    msg: string;
+  } | null>(null);
+
+  async function decide(id: string | number, approve: boolean) {
+    const prev = rows;
+    const next = approve ? "معتمدة" : "مرفوضة";
+    setActionError(null);
+    setRows((rs) => rs.map((r) => (r.id === id ? { ...r, status: next } : r)));
+
+    // Demo mode: local-only update, no API call.
+    if (isDemo) return;
+
+    setPendingId(id);
+    try {
+      await decideRequest(id, approve);
+    } catch (e) {
+      // Revert the optimistic update and surface a small inline error.
+      setRows(prev);
+      setActionError({
+        id,
+        msg: e instanceof Error ? e.message : "تعذّر تنفيذ الإجراء، حاول مرة أخرى.",
+      });
+    } finally {
+      setPendingId(null);
+    }
+  }
+
+  const pendingCount = rows.filter(
     (r) => r.status === "بانتظار الموافقة"
   ).length;
-  const approvedCount = REQUESTS.filter((r) => r.status === "معتمدة").length;
-  const rejectedCount = REQUESTS.filter((r) => r.status === "مرفوضة").length;
+  const approvedCount = rows.filter((r) => r.status === "معتمدة").length;
+  const rejectedCount = rows.filter((r) => r.status === "مرفوضة").length;
 
   return (
     <>
@@ -195,7 +237,7 @@ export default async function RequestsPage({
           />
           <StatCard
             label="إجمالي الطلبات"
-            value={REQUESTS.length}
+            value={rows.length}
             icon="📨"
             accent="info"
             trend={{ v: "+3", up: true }}
@@ -205,7 +247,7 @@ export default async function RequestsPage({
 
         {/* ===== Mobile: cards (stacks under md) ===== */}
         <div className="grid grid-cols-1 gap-3 md:hidden">
-          {REQUESTS.map((r) => (
+          {rows.map((r) => (
             <div key={r.id} className="card">
               <div className="flex items-start justify-between gap-2 mb-3">
                 <div className="min-w-0">
@@ -218,7 +260,7 @@ export default async function RequestsPage({
               </div>
 
               <div className="flex items-center gap-2 mb-3">
-                <span className="text-lg">{TYPE_ICON[r.type]}</span>
+                <span className="text-lg">{TYPE_ICON[r.type] ?? "📨"}</span>
                 <span className="pill pill-brand text-[11px] whitespace-nowrap">
                   {r.type}
                 </span>
@@ -254,7 +296,16 @@ export default async function RequestsPage({
 
               {r.status === "بانتظار الموافقة" && (
                 <div className="pt-3 border-t border-[var(--border)]">
-                  <ActionButtons />
+                  <ActionButtons
+                    onApprove={() => decide(r.id, true)}
+                    onReject={() => decide(r.id, false)}
+                    disabled={pendingId === r.id}
+                  />
+                  {actionError?.id === r.id && (
+                    <div className="text-[11px] text-[var(--danger)] mt-1.5">
+                      {actionError.msg}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -287,7 +338,7 @@ export default async function RequestsPage({
               </tr>
             </thead>
             <tbody>
-              {REQUESTS.map((r) => (
+              {rows.map((r) => (
                 <tr
                   key={r.id}
                   className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-hover)] transition-colors align-top"
@@ -302,7 +353,7 @@ export default async function RequestsPage({
                   </td>
                   <td className="px-4 py-3">
                     <span className="inline-flex items-center gap-1.5 pill pill-brand text-[11px] whitespace-nowrap">
-                      <span>{TYPE_ICON[r.type]}</span>
+                      <span>{TYPE_ICON[r.type] ?? "📨"}</span>
                       {r.type}
                     </span>
                     {r.amount && (
@@ -329,8 +380,17 @@ export default async function RequestsPage({
                   </td>
                   <td className="px-4 py-3">
                     {r.status === "بانتظار الموافقة" ? (
-                      <div className="flex justify-center">
-                        <ActionButtons />
+                      <div className="flex flex-col items-center">
+                        <ActionButtons
+                          onApprove={() => decide(r.id, true)}
+                          onReject={() => decide(r.id, false)}
+                          disabled={pendingId === r.id}
+                        />
+                        {actionError?.id === r.id && (
+                          <div className="text-[11px] text-[var(--danger)] mt-1.5 text-center">
+                            {actionError.msg}
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="text-center text-[var(--text-faint)] text-xs">

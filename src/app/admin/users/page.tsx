@@ -6,6 +6,9 @@ import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { StatCard } from "@/components/app/StatCard";
 import { UserActions } from "@/components/admin/UserActions";
+import { useAdminData } from "@/hooks/useAdminData";
+import { fetchAdminTenants, fetchAdminUsers, setUserStatus } from "@/lib/data/queries";
+import type { AdminTenantRow, AdminUserRow } from "@/lib/data/types";
 import { ADMIN_USERS, ADMIN_TENANTS } from "@/data/admin-mock";
 
 const STATUS_COLOR: Record<string, string> = {
@@ -14,25 +17,96 @@ const STATUS_COLOR: Record<string, string> = {
   "مدعو": "var(--info)",
 };
 
+/* English row keys (live data) → Arabic labels. Mock rows already carry
+   Arabic labels and pass through the `?? fallback` untouched. */
+const STATUS_AR: Record<string, string> = {
+  active: "نشط",
+  suspended: "معطل",
+  disabled: "معطل",
+  invited: "مدعو",
+};
+
+const ROLE_AR: Record<string, string> = {
+  admin: "مدير النظام",
+  general_manager: "مدير عام",
+  partner: "شريك",
+  manager: "مدير القضايا",
+  lawyer: "محامي",
+  consultant: "مستشار",
+  accountant: "محاسب",
+  marketer: "مسوّق",
+  auditor: "مدقق",
+  secretary: "سكرتارية",
+};
+
+type UserRow = AdminUserRow & { mfa?: boolean };
+
+/* Demo fallback — the existing mock reshaped into the live row shape.
+   tenantId carries the slug; the join below resolves by id OR slug. */
+const FALLBACK_USERS: UserRow[] = ADMIN_USERS.map((u) => ({
+  id: String(u.id),
+  name: u.name,
+  email: u.email,
+  role: u.role,
+  status: u.status,
+  tenantId: u.tenantSlug,
+  lastSeen: u.lastLogin,
+  createdAt: u.createdAt,
+  mfa: u.mfa,
+}));
+
+const FALLBACK_TENANTS: AdminTenantRow[] = ADMIN_TENANTS.map((t) => ({
+  id: String(t.id),
+  slug: t.slug,
+  name: t.name,
+  plan: t.plan,
+  status: t.status,
+  enabledAddons: [],
+  trialEndsAt: null,
+  createdAt: t.signedUp,
+}));
+
 export default function AdminUsersPage() {
   const [q, setQ] = useState("");
   const [tenant, setTenant] = useState("");
   const [role, setRole] = useState("");
 
-  const roles = Array.from(new Set(ADMIN_USERS.map((u) => u.role)));
+  const { data: userRows, isLive, reload } = useAdminData<UserRow>(fetchAdminUsers, FALLBACK_USERS);
+  const { data: tenants } = useAdminData(fetchAdminTenants, FALLBACK_TENANTS);
+
+  const users = useMemo(() => {
+    const tenantByKey = new Map<string, AdminTenantRow>();
+    for (const t of tenants) {
+      tenantByKey.set(t.id, t);
+      tenantByKey.set(t.slug, t);
+    }
+    return userRows.map((u) => {
+      const t = u.tenantId ? tenantByKey.get(u.tenantId) : undefined;
+      return {
+        ...u,
+        role: ROLE_AR[u.role] ?? u.role,
+        status: STATUS_AR[u.status] ?? u.status,
+        tenantSlug: t?.slug ?? "",
+        tenantName: t?.name ?? "—",
+      };
+    });
+  }, [userRows, tenants]);
+
+  const roles = useMemo(() => Array.from(new Set(users.map((u) => u.role))), [users]);
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
-    return ADMIN_USERS.filter((u) => {
+    return users.filter((u) => {
       if (term && !(`${u.name} ${u.email} ${u.tenantName}`.toLowerCase().includes(term))) return false;
       if (tenant && u.tenantSlug !== tenant) return false;
       if (role && u.role !== role) return false;
       return true;
     });
-  }, [q, tenant, role]);
+  }, [users, q, tenant, role]);
 
-  const active = ADMIN_USERS.filter((u) => u.status === "نشط").length;
-  const withMfa = ADMIN_USERS.filter((u) => u.mfa).length;
+  const active = users.filter((u) => u.status === "نشط").length;
+  const withMfa = users.filter((u) => u.mfa).length;
+  const mfaPct = users.length ? Math.round((withMfa / users.length) * 100) : 0;
 
   return (
     <>
@@ -40,15 +114,15 @@ export default function AdminUsersPage() {
       <main className="p-4 sm:p-6 max-w-7xl w-full">
         <PageHeader
           title="كل المستخدمين"
-          sub={`${ADMIN_USERS.length} مستخدم عبر ${ADMIN_TENANTS.length} مكتب`}
+          sub={`${users.length} مستخدم عبر ${tenants.length} مكتب`}
           actions={<button className="btn btn-ghost text-sm py-2.5">📥 تصدير CSV</button>}
         />
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-          <StatCard label="إجمالي المستخدمين" value={ADMIN_USERS.length} icon="👥" accent="brand" />
+          <StatCard label="إجمالي المستخدمين" value={users.length} icon="👥" accent="brand" />
           <StatCard label="نشطون" value={active} icon="✓" accent="success" />
-          <StatCard label="مفعّل 2FA" value={`${Math.round((withMfa / ADMIN_USERS.length) * 100)}%`} icon="🔐" accent="info" hint={`${withMfa} مستخدم`} />
-          <StatCard label="المكاتب" value={ADMIN_TENANTS.length} icon="🏢" accent="accent" />
+          <StatCard label="مفعّل 2FA" value={`${mfaPct}%`} icon="🔐" accent="info" hint={`${withMfa} مستخدم`} />
+          <StatCard label="المكاتب" value={tenants.length} icon="🏢" accent="accent" />
         </div>
 
         {/* Filters */}
@@ -65,7 +139,7 @@ export default function AdminUsersPage() {
           <select value={tenant} onChange={(e) => setTenant(e.target.value)}
             className="px-3 py-2.5 text-sm rounded-lg bg-[var(--bg-card)] border border-[var(--border)] outline-none focus:border-[var(--brand)]">
             <option value="">كل المكاتب</option>
-            {ADMIN_TENANTS.map((t) => <option key={t.slug} value={t.slug}>{t.name}</option>)}
+            {tenants.map((t) => <option key={t.slug} value={t.slug}>{t.name}</option>)}
           </select>
           <select value={role} onChange={(e) => setRole(e.target.value)}
             className="px-3 py-2.5 text-sm rounded-lg bg-[var(--bg-card)] border border-[var(--border)] outline-none focus:border-[var(--brand)]">
@@ -108,7 +182,7 @@ export default function AdminUsersPage() {
                     </Link>
                   </td>
                   <td className="p-3 text-xs text-[var(--text-muted)]">{u.role}</td>
-                  <td className="p-3 text-xs text-[var(--text-faint)]">{u.lastLogin}</td>
+                  <td className="p-3 text-xs text-[var(--text-faint)]">{u.lastSeen}</td>
                   <td className="p-3 text-xs">{u.mfa ? "🔐" : "—"}</td>
                   <td className="p-3">
                     <span className="text-[10px] font-bold px-2 py-1 rounded-full"
@@ -117,7 +191,12 @@ export default function AdminUsersPage() {
                     </span>
                   </td>
                   <td className="p-3">
-                    <UserActions userName={u.name} tenantName={u.tenantName} status={u.status} />
+                    <UserActions
+                      userName={u.name}
+                      tenantName={u.tenantName}
+                      status={u.status}
+                      onSetStatus={isLive ? async (s) => { await setUserStatus(u.id, s); reload(); } : undefined}
+                    />
                   </td>
                 </tr>
               ))}

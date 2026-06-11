@@ -1,6 +1,13 @@
+"use client";
+
+import { useMemo } from "react";
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { StatCard } from "@/components/app/StatCard";
+import { useAdminData } from "@/hooks/useAdminData";
+import { fetchAdminTenants } from "@/lib/data/queries";
+import type { AdminTenantRow } from "@/lib/data/types";
+import { ADMIN_TENANTS, ADMIN_TENANT_ADDONS } from "@/data/admin-mock";
 
 const TRIAL_LENGTH = 14;
 
@@ -14,29 +21,29 @@ interface Trial {
   conversion: number;
 }
 
-const TRIALS: Trial[] = [
-  { id: "t1", firm: "شركة رائد للمحاماة", slug: "raed", startDate: "2026-06-08", daysLeft: 12, activity: "عالي", conversion: 82 },
-  { id: "t2", firm: "مكتب الفيصل", slug: "faisal", startDate: "2026-06-04", daysLeft: 8, activity: "عالي", conversion: 71 },
-  { id: "t3", firm: "مكتب القحطاني", slug: "qahtani", startDate: "2026-05-30", daysLeft: 3, activity: "متوسط", conversion: 48 },
-  { id: "t4", firm: "مكتب الخوري", slug: "khoury", startDate: "2026-06-06", daysLeft: 10, activity: "متوسط", conversion: 55 },
-  { id: "t5", firm: "مكتب المطيري", slug: "mutairi", startDate: "2026-05-28", daysLeft: 1, activity: "منخفض", conversion: 19 },
-  { id: "t6", firm: "مؤسسة العتيبي", slug: "otaibi", startDate: "2026-05-27", daysLeft: 0, activity: "منخفض", conversion: 12 },
-];
+function addDays(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+// Demo fallback — المستأجرون في فترة تجربة. Shaped like AdminTenantRow.
+const FALLBACK_TENANTS: AdminTenantRow[] = ADMIN_TENANTS.map((t) => ({
+  id: String(t.id),
+  slug: t.slug,
+  name: t.name,
+  plan: "bundle_base",
+  status: t.status === "تجربة" ? "trialing" : t.status === "متأخر دفع" ? "past_due" : "active",
+  enabledAddons: ADMIN_TENANT_ADDONS[t.slug] ?? [],
+  trialEndsAt: t.trial ? addDays(t.signedUp, TRIAL_LENGTH) : null,
+  createdAt: t.signedUp,
+}));
 
 const ACTIVITY_COLOR: Record<string, string> = {
   "عالي": "var(--success)",
   "متوسط": "var(--warn)",
   "منخفض": "var(--danger)",
 };
-
-const activeCount = TRIALS.length;
-const endingToday = TRIALS.filter((t) => t.daysLeft === 0).length;
-const conversionRate = Math.round(
-  TRIALS.reduce((s, t) => s + t.conversion, 0) / TRIALS.length
-);
-const avgDaysLeft = Math.round(
-  (TRIALS.reduce((s, t) => s + t.daysLeft, 0) / TRIALS.length) * 10
-) / 10;
 
 function conversionColor(p: number): string {
   if (p >= 65) return "var(--success)";
@@ -45,6 +52,42 @@ function conversionColor(p: number): string {
 }
 
 export default function AdminTrialsPage() {
+  const { data: tenants } = useAdminData(fetchAdminTenants, FALLBACK_TENANTS);
+
+  // الأيام المتبقية تُحسب على العميل فقط (الصفحة خلف AdminGate فلا تُرسم في البناء) — آمن من فروق الترطيب.
+  const trials = useMemo<Trial[]>(() => {
+    const now = Date.now();
+    return tenants
+      .filter((t) => t.status === "trialing")
+      .map((t): Trial => {
+        const ends = t.trialEndsAt ? Date.parse(`${t.trialEndsAt}T00:00:00`) : NaN;
+        const daysLeft = Number.isFinite(ends)
+          ? Math.max(0, Math.min(TRIAL_LENGTH, Math.ceil((ends - now) / 86_400_000)))
+          : 0;
+        // نشاط/احتمالية التحويل: اشتقاق من تفعيل الإضافات وعمق التجربة (لا تُخزَّن كقياسات مستقلة)
+        const engagement = t.enabledAddons.length;
+        const daysUsed = TRIAL_LENGTH - daysLeft;
+        return {
+          id: t.id,
+          firm: t.name,
+          slug: t.slug,
+          startDate: t.createdAt,
+          daysLeft,
+          activity: engagement >= 5 ? "عالي" : engagement >= 2 ? "متوسط" : "منخفض",
+          conversion: Math.max(5, Math.min(95, 15 + engagement * 10 + daysUsed * 3)),
+        };
+      });
+  }, [tenants]);
+
+  const activeCount = trials.length;
+  const endingToday = trials.filter((t) => t.daysLeft === 0).length;
+  const conversionRate = activeCount
+    ? Math.round(trials.reduce((s, t) => s + t.conversion, 0) / activeCount)
+    : 0;
+  const avgDaysLeft = activeCount
+    ? Math.round((trials.reduce((s, t) => s + t.daysLeft, 0) / activeCount) * 10) / 10
+    : 0;
+
   return (
     <>
       <Topbar title="التجارب" breadcrumb={["Admin", "التجارب"]} />
@@ -100,7 +143,7 @@ export default function AdminTrialsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
-              {TRIALS.map((t) => {
+              {trials.map((t) => {
                 const daysUsed = TRIAL_LENGTH - t.daysLeft;
                 const usedPct = Math.min(100, Math.round((daysUsed / TRIAL_LENGTH) * 100));
                 const urgent = t.daysLeft <= 3;

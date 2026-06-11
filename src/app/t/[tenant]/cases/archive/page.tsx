@@ -1,114 +1,45 @@
+"use client";
+
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { StatCard } from "@/components/app/StatCard";
+import { useQafData } from "@/hooks/useQafData";
+import { fetchArchivedCases } from "@/lib/data/queries";
+import type { Case } from "@/lib/data/types";
 
-type Outcome = "لصالحنا" | "ضدنا" | "تسوية";
-
-interface ArchivedCase {
-  id: string;
-  no: string;
-  type: string;
-  court: string;
-  outcome: Outcome;
-  closedAt: string;
-  duration: string;
-}
-
-const ARCHIVED_CASES: ArchivedCase[] = [
-  {
-    id: "a1",
-    no: "ق-2024-0117",
-    type: "نزاع تجاري",
-    court: "المحكمة التجارية بالرياض",
-    outcome: "لصالحنا",
-    closedAt: "2026-05-12",
-    duration: "9 أشهر",
-  },
-  {
-    id: "a2",
-    no: "ق-2024-0093",
-    type: "مطالبة مالية",
-    court: "محكمة التنفيذ بالرياض",
-    outcome: "تسوية",
-    closedAt: "2026-04-28",
-    duration: "5 أشهر",
-  },
-  {
-    id: "a3",
-    no: "ق-2023-0451",
-    type: "فصل تعسفي",
-    court: "المحكمة العمالية بجدة",
-    outcome: "لصالحنا",
-    closedAt: "2026-04-03",
-    duration: "11 شهر",
-  },
-  {
-    id: "a4",
-    no: "ق-2023-0388",
-    type: "حضانة ونفقة",
-    court: "محكمة الأحوال الشخصية بالرياض",
-    outcome: "ضدنا",
-    closedAt: "2026-03-19",
-    duration: "14 شهر",
-  },
-  {
-    id: "a5",
-    no: "ق-2024-0021",
-    type: "اعتراض إداري",
-    court: "المحكمة الإدارية بالدمام",
-    outcome: "لصالحنا",
-    closedAt: "2026-02-26",
-    duration: "7 أشهر",
-  },
-  {
-    id: "a6",
-    no: "ق-2023-0274",
-    type: "نزاع عقاري",
-    court: "المحكمة العامة بالرياض",
-    outcome: "تسوية",
-    closedAt: "2026-01-30",
-    duration: "13 شهر",
-  },
-  {
-    id: "a7",
-    no: "ق-2023-0159",
-    type: "شيك بدون رصيد",
-    court: "المحكمة الجزائية بالرياض",
-    outcome: "لصالحنا",
-    closedAt: "2025-12-14",
-    duration: "6 أشهر",
-  },
-  {
-    id: "a8",
-    no: "ق-2022-0502",
-    type: "إخلاء عقار",
-    court: "محكمة التنفيذ بمكة المكرمة",
-    outcome: "ضدنا",
-    closedAt: "2025-11-08",
-    duration: "10 أشهر",
-  },
+// Demo fallback (shown only when no firm/DB yet). Shaped like Case:
+// status carries the outcome label, action carries the duration, deadline = closing date.
+const FALLBACK_ARCHIVED: Case[] = [
+  { id: "a1", name: "ق-2024-0117", court: "المحكمة التجارية بالرياض", type: "نزاع تجاري", plaintiff: "", defendant: "", status: "لصالحنا", action: "9 أشهر", deadline: "2026-05-12", risk: 0, assignedTo: "" },
+  { id: "a2", name: "ق-2024-0093", court: "محكمة التنفيذ بالرياض", type: "مطالبة مالية", plaintiff: "", defendant: "", status: "تسوية", action: "5 أشهر", deadline: "2026-04-28", risk: 0, assignedTo: "" },
+  { id: "a3", name: "ق-2023-0451", court: "المحكمة العمالية بجدة", type: "فصل تعسفي", plaintiff: "", defendant: "", status: "لصالحنا", action: "11 شهر", deadline: "2026-04-03", risk: 0, assignedTo: "" },
+  { id: "a4", name: "ق-2023-0388", court: "محكمة الأحوال الشخصية بالرياض", type: "حضانة ونفقة", plaintiff: "", defendant: "", status: "ضدنا", action: "14 شهر", deadline: "2026-03-19", risk: 0, assignedTo: "" },
+  { id: "a5", name: "ق-2024-0021", court: "المحكمة الإدارية بالدمام", type: "اعتراض إداري", plaintiff: "", defendant: "", status: "لصالحنا", action: "7 أشهر", deadline: "2026-02-26", risk: 0, assignedTo: "" },
+  { id: "a6", name: "ق-2023-0274", court: "المحكمة العامة بالرياض", type: "نزاع عقاري", plaintiff: "", defendant: "", status: "تسوية", action: "13 شهر", deadline: "2026-01-30", risk: 0, assignedTo: "" },
+  { id: "a7", name: "ق-2023-0159", court: "المحكمة الجزائية بالرياض", type: "شيك بدون رصيد", plaintiff: "", defendant: "", status: "لصالحنا", action: "6 أشهر", deadline: "2025-12-14", risk: 0, assignedTo: "" },
+  { id: "a8", name: "ق-2022-0502", court: "محكمة التنفيذ بمكة المكرمة", type: "إخلاء عقار", plaintiff: "", defendant: "", status: "ضدنا", action: "10 أشهر", deadline: "2025-11-08", risk: 0, assignedTo: "" },
 ];
 
-const OUTCOME_COLOR: Record<Outcome, string> = {
+const OUTCOME_COLOR: Record<string, string> = {
   "لصالحنا": "var(--success)",
   "ضدنا": "var(--danger)",
   "تسوية": "var(--warn)",
 };
 
+function outcomeColor(status: string): string {
+  return OUTCOME_COLOR[status] ?? "var(--text-faint)";
+}
+
 const FILTERS = ["الكل", "مكسوبة", "خاسرة", "تسوية"];
 
-export default async function CasesArchivePage({
-  params,
-}: {
-  params: Promise<{ tenant: string }>;
-}) {
-  await params;
+export default function CasesArchivePage() {
+  const { data: archived } = useQafData(fetchArchivedCases, FALLBACK_ARCHIVED);
 
-  const total = ARCHIVED_CASES.length;
-  const won = ARCHIVED_CASES.filter((c) => c.outcome === "لصالحنا").length;
-  const settled = ARCHIVED_CASES.filter((c) => c.outcome === "تسوية").length;
+  const total = archived.length;
+  const won = archived.filter((c) => c.status === "لصالحنا").length;
+  const settled = archived.filter((c) => c.status === "تسوية").length;
   // الكسب = لصالحنا + التسويات (تُحتسب نتيجة إيجابية للمكتب)
-  const winRate = Math.round(((won + settled) / total) * 100);
+  const winRate = total ? Math.round(((won + settled) / total) * 100) : 0;
 
   return (
     <>
@@ -201,40 +132,40 @@ export default async function CasesArchivePage({
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
-              {ARCHIVED_CASES.map((c) => (
+              {archived.map((c) => (
                 <tr
                   key={c.id}
                   className="hover:bg-[var(--bg-hover)] transition-colors cursor-pointer"
                 >
                   <td className="px-4 py-3">
                     <span className="num font-bold text-[var(--text)]" dir="ltr">
-                      {c.no}
+                      {c.name}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-[var(--text-muted)] whitespace-nowrap">
-                    {c.type}
+                    {c.type || "—"}
                   </td>
                   <td className="px-4 py-3 text-[var(--text-muted)]">
-                    <span className="truncate block max-w-[220px]">{c.court}</span>
+                    <span className="truncate block max-w-[220px]">{c.court || "—"}</span>
                   </td>
                   <td className="px-4 py-3">
                     <span
                       className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full whitespace-nowrap"
                       style={{
-                        background: `color-mix(in srgb, ${OUTCOME_COLOR[c.outcome]} 15%, transparent)`,
-                        color: OUTCOME_COLOR[c.outcome],
+                        background: `color-mix(in srgb, ${outcomeColor(c.status)} 15%, transparent)`,
+                        color: outcomeColor(c.status),
                       }}
                     >
-                      ● {c.outcome}
+                      ● {c.status}
                     </span>
                   </td>
                   <td className="px-4 py-3">
                     <span className="num text-[var(--text-muted)]" dir="ltr">
-                      {c.closedAt}
+                      {c.deadline || "—"}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-[var(--text-muted)] whitespace-nowrap">
-                    {c.duration}
+                    {c.action || "—"}
                   </td>
                 </tr>
               ))}

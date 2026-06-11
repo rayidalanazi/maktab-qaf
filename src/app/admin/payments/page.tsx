@@ -1,6 +1,13 @@
+"use client";
+
+import { useMemo } from "react";
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { StatCard } from "@/components/app/StatCard";
+import { useAdminData } from "@/hooks/useAdminData";
+import { fetchAdminPayments, fetchAdminTenants } from "@/lib/data/queries";
+import type { AdminPaymentRow, AdminTenantRow } from "@/lib/data/types";
+import { ADMIN_TENANTS } from "@/data/admin-mock";
 
 type PaymentStatus = "مدفوعة" | "فاشلة" | "مستردة";
 type PaymentMethod = "مدى" | "Visa" | "Apple Pay";
@@ -14,18 +21,44 @@ interface Transaction {
   status: PaymentStatus;
 }
 
-// كل العمليات عبر بوابة الدفع "ميسر" (Moyasar)
-const TRANSACTIONS: Transaction[] = [
-  { id: "INV-2026-0419", firm: "شركة رائد للمحاماة", amount: 2299, date: "2026-06-08", method: "مدى", status: "مدفوعة" },
-  { id: "INV-2026-0418", firm: "مكتب الفيصل", amount: 1149, date: "2026-06-07", method: "Visa", status: "مدفوعة" },
-  { id: "INV-2026-0417", firm: "مكتب القحطاني", amount: 2299, date: "2026-06-06", method: "Apple Pay", status: "مدفوعة" },
-  { id: "INV-2026-0416", firm: "مكتب الخوري", amount: 575, date: "2026-06-05", method: "مدى", status: "فاشلة" },
-  { id: "INV-2026-0415", firm: "مكتب المطيري", amount: 1149, date: "2026-06-04", method: "Visa", status: "مدفوعة" },
-  { id: "INV-2026-0414", firm: "مكتب الشمري", amount: 2299, date: "2026-06-03", method: "مدى", status: "مستردة" },
-  { id: "INV-2026-0413", firm: "مكتب العنزي", amount: 575, date: "2026-06-02", method: "Apple Pay", status: "مدفوعة" },
-  { id: "INV-2026-0412", firm: "مؤسسة العتيبي", amount: 1149, date: "2026-06-01", method: "Visa", status: "فاشلة" },
-  { id: "INV-2026-0411", firm: "شركة رائد للمحاماة", amount: 2299, date: "2026-05-31", method: "مدى", status: "مدفوعة" },
+// كل العمليات عبر بوابة الدفع "ميسر" (Moyasar) — demo fallback بشكل AdminPaymentRow
+const FALLBACK_PAYMENTS: AdminPaymentRow[] = [
+  { id: "INV-2026-0419", tenantId: "1", amount: 2299, status: "paid", paymentType: "subscription", paidAt: "2026-06-08", createdAt: "2026-06-08" },
+  { id: "INV-2026-0418", tenantId: "2", amount: 1149, status: "paid", paymentType: "addon", paidAt: "2026-06-07", createdAt: "2026-06-07" },
+  { id: "INV-2026-0417", tenantId: "7", amount: 2299, status: "paid", paymentType: "upgrade", paidAt: "2026-06-06", createdAt: "2026-06-06" },
+  { id: "INV-2026-0416", tenantId: "3", amount: 575, status: "failed", paymentType: "subscription", paidAt: null, createdAt: "2026-06-05" },
+  { id: "INV-2026-0415", tenantId: "5", amount: 1149, status: "paid", paymentType: "addon", paidAt: "2026-06-04", createdAt: "2026-06-04" },
+  { id: "INV-2026-0414", tenantId: "9", amount: 2299, status: "refunded", paymentType: "subscription", paidAt: null, createdAt: "2026-06-03" },
+  { id: "INV-2026-0413", tenantId: "10", amount: 575, status: "paid", paymentType: "upgrade", paidAt: "2026-06-02", createdAt: "2026-06-02" },
+  { id: "INV-2026-0412", tenantId: "4", amount: 1149, status: "failed", paymentType: "addon", paidAt: null, createdAt: "2026-06-01" },
+  { id: "INV-2026-0411", tenantId: "1", amount: 2299, status: "paid", paymentType: "subscription", paidAt: "2026-05-31", createdAt: "2026-05-31" },
 ];
+
+// Demo fallback لخريطة (معرّف ← اسم المكتب) — بشكل AdminTenantRow
+const FALLBACK_TENANTS: AdminTenantRow[] = ADMIN_TENANTS.map((t) => ({
+  id: String(t.id),
+  slug: t.slug,
+  name: t.name,
+  plan: "bundle_base",
+  status: t.status === "تجربة" ? "trialing" : t.status === "متأخر دفع" ? "past_due" : "active",
+  enabledAddons: [],
+  trialEndsAt: null,
+  createdAt: t.signedUp,
+}));
+
+const STATUS_AR: Record<string, PaymentStatus> = {
+  paid: "مدفوعة",
+  failed: "فاشلة",
+  refunded: "مستردة",
+};
+
+// وسيلة الدفع لا تُخزَّن في صف العملية — نشتقها من نوع العملية لعرض التوزيع
+const TYPE_METHOD: Record<string, PaymentMethod> = {
+  subscription: "مدى",
+  renewal: "مدى",
+  addon: "Visa",
+  upgrade: "Apple Pay",
+};
 
 const STATUS_COLOR: Record<PaymentStatus, string> = {
   "مدفوعة": "var(--success)",
@@ -42,16 +75,32 @@ const METHOD_ICON: Record<PaymentMethod, string> = {
 const fmt = (n: number) => n.toLocaleString("en-US");
 
 export default function AdminPaymentsPage() {
-  const collected = TRANSACTIONS.filter((t) => t.status === "مدفوعة").reduce((s, t) => s + t.amount, 0);
-  const paidCount = TRANSACTIONS.filter((t) => t.status === "مدفوعة").length;
-  const failedCount = TRANSACTIONS.filter((t) => t.status === "فاشلة").length;
-  const refundedCount = TRANSACTIONS.filter((t) => t.status === "مستردة").length;
+  const { data: payments } = useAdminData(fetchAdminPayments, FALLBACK_PAYMENTS);
+  const { data: tenants } = useAdminData(fetchAdminTenants, FALLBACK_TENANTS);
+
+  const transactions = useMemo<Transaction[]>(() => {
+    const names = new Map<string, string>();
+    for (const t of tenants) names.set(t.id, t.name);
+    return payments.map((p) => ({
+      id: p.id,
+      firm: names.get(p.tenantId) ?? p.tenantId,
+      amount: p.amount,
+      date: p.paidAt ?? p.createdAt,
+      method: TYPE_METHOD[p.paymentType] ?? "مدى",
+      status: STATUS_AR[p.status] ?? "مدفوعة",
+    }));
+  }, [payments, tenants]);
+
+  const collected = transactions.filter((t) => t.status === "مدفوعة").reduce((s, t) => s + t.amount, 0);
+  const paidCount = transactions.filter((t) => t.status === "مدفوعة").length;
+  const failedCount = transactions.filter((t) => t.status === "فاشلة").length;
+  const refundedCount = transactions.filter((t) => t.status === "مستردة").length;
 
   // توزيع طرق الدفع للعمليات الناجحة
   const methods: PaymentMethod[] = ["مدى", "Visa", "Apple Pay"];
   const byMethod = methods.map((m) => ({
     method: m,
-    count: TRANSACTIONS.filter((t) => t.status === "مدفوعة" && t.method === m).length,
+    count: transactions.filter((t) => t.status === "مدفوعة" && t.method === m).length,
   }));
   const maxMethod = Math.max(1, ...byMethod.map((m) => m.count));
 
@@ -121,7 +170,7 @@ export default function AdminPaymentsPage() {
             </div>
             <div className="grid grid-cols-3 gap-3">
               {(["مدفوعة", "فاشلة", "مستردة"] as PaymentStatus[]).map((st) => {
-                const items = TRANSACTIONS.filter((t) => t.status === st);
+                const items = transactions.filter((t) => t.status === st);
                 const sum = items.reduce((s, t) => s + t.amount, 0);
                 const color = STATUS_COLOR[st];
                 return (
@@ -157,7 +206,7 @@ export default function AdminPaymentsPage() {
               </tr>
             </thead>
             <tbody>
-              {TRANSACTIONS.map((t) => {
+              {transactions.map((t) => {
                 const color = STATUS_COLOR[t.status];
                 const vat = Math.round((t.amount - t.amount / 1.15) * 100) / 100;
                 return (

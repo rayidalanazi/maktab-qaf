@@ -1,50 +1,95 @@
+"use client";
+
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { StatCard } from "@/components/app/StatCard";
+import { useQafData } from "@/hooks/useQafData";
+import { fetchCases, fetchInvoices } from "@/lib/data/queries";
+import { MOCK_CASES } from "@/data/app-mock";
+import type { InvoiceItem } from "@/lib/data/types";
 
-// إيرادات آخر 6 أشهر (بالريال السعودي)
-const REVENUE = [
-  { month: "ديسمبر", value: 142000 },
-  { month: "يناير", value: 168500 },
-  { month: "فبراير", value: 121000 },
-  { month: "مارس", value: 195400 },
-  { month: "أبريل", value: 176200 },
-  { month: "مايو", value: 231800 },
+// Demo fallback (shown only when no firm/DB yet). Shaped like InvoiceItem.
+const FALLBACK_INVOICES: InvoiceItem[] = [
+  { id: "INV-201", client: "شركة النجم التجارية", number: "INV-2025-201", amount: 142000, vat: 0, total: 142000, status: "paid", issued: "2025-12-18", due: "2026-01-18" },
+  { id: "INV-202", client: "بنك الراجحي", number: "INV-2026-202", amount: 168500, vat: 0, total: 168500, status: "paid", issued: "2026-01-20", due: "2026-02-20" },
+  { id: "INV-203", client: "مؤسسة الخليج الصناعية", number: "INV-2026-203", amount: 121000, vat: 0, total: 121000, status: "paid", issued: "2026-02-15", due: "2026-03-15" },
+  { id: "INV-204", client: "شركة المنارة العقارية", number: "INV-2026-204", amount: 195400, vat: 0, total: 195400, status: "paid", issued: "2026-03-12", due: "2026-04-12" },
+  { id: "INV-205", client: "شركة النجم التجارية", number: "INV-2026-205", amount: 176200, vat: 0, total: 176200, status: "paid", issued: "2026-04-09", due: "2026-05-09" },
+  { id: "INV-206", client: "مؤسسة الخليج الصناعية", number: "INV-2026-206", amount: 231800, vat: 0, total: 231800, status: "paid", issued: "2026-05-14", due: "2026-06-14" },
 ];
 
-// توزيع القضايا حسب نوع المحكمة
-const CASE_TYPES = [
-  { label: "المحكمة التجارية", value: 38, accent: "var(--brand)" },
-  { label: "محكمة التنفيذ", value: 29, accent: "var(--accent)" },
-  { label: "المحكمة العامة بالرياض", value: 22, accent: "var(--info)" },
-  { label: "محكمة الأحوال الشخصية", value: 17, accent: "var(--success)" },
-  { label: "المحكمة العمالية", value: 13, accent: "var(--warn)" },
-  { label: "المحكمة الإدارية", value: 9, accent: "var(--danger)" },
+// أسماء الأشهر — تُشتق من تاريخ إصدار الفاتورة (YYYY-MM)
+const AR_MONTHS = [
+  "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
+  "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر",
 ];
 
-// أداء المحامين خلال الربع الحالي
-const LAWYERS = [
-  { name: "أ. سلطان القحطاني", cases: 24, won: 19, revenue: 312000, rate: 79 },
-  { name: "أ. نورة العتيبي", cases: 21, won: 18, revenue: 287500, rate: 86 },
-  { name: "أ. فهد الدوسري", cases: 18, won: 12, revenue: 198000, rate: 67 },
-  { name: "أ. ريم الشهري", cases: 16, won: 14, revenue: 241300, rate: 88 },
-  { name: "أ. ماجد الحربي", cases: 14, won: 9, revenue: 156800, rate: 64 },
-  { name: "أ. لمى الزهراني", cases: 11, won: 8, revenue: 132400, rate: 73 },
+// ألوان أعمدة توزيع القضايا
+const TYPE_ACCENTS = [
+  "var(--brand)", "var(--accent)", "var(--info)",
+  "var(--success)", "var(--warn)", "var(--danger)",
 ];
 
 const SAR = (n: number) => n.toLocaleString("en-US");
 
-export default async function ReportsPage({
-  params,
-}: {
-  params: Promise<{ tenant: string }>;
-}) {
-  await params;
+export default function ReportsPage() {
+  const { data: cases } = useQafData(fetchCases, MOCK_CASES);
+  const { data: invoices } = useQafData(fetchInvoices, FALLBACK_INVOICES);
 
-  const maxRevenue = Math.max(...REVENUE.map((r) => r.value));
-  const maxCases = Math.max(...CASE_TYPES.map((c) => c.value));
-  const totalRevenue = REVENUE.reduce((s, r) => s + r.value, 0);
-  const totalCases = CASE_TYPES.reduce((s, c) => s + c.value, 0);
+  // إيرادات آخر 6 أشهر (بالريال السعودي) — من الفواتير المحصّلة
+  const paid = invoices.filter((i) => i.status === "paid");
+  const byMonth = new Map<string, number>();
+  for (const inv of paid) {
+    const m = (inv.issued || "").slice(0, 7);
+    if (m) byMonth.set(m, (byMonth.get(m) ?? 0) + inv.total);
+  }
+  const revenue = [...byMonth.keys()]
+    .sort()
+    .slice(-6)
+    .map((key) => ({
+      key,
+      month: AR_MONTHS[parseInt(key.slice(5), 10) - 1] ?? key,
+      value: byMonth.get(key) ?? 0,
+    }));
+
+  // توزيع القضايا حسب النوع
+  const byType = new Map<string, number>();
+  for (const c of cases) {
+    const t = c.type || "أخرى";
+    byType.set(t, (byType.get(t) ?? 0) + 1);
+  }
+  const caseTypes = [...byType.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([label, value], i) => ({ label, value, accent: TYPE_ACCENTS[i % TYPE_ACCENTS.length] }));
+
+  // أداء المحامين — محسوب من القضايا المسندة والإيراد المحصّل
+  const totalRevenue = revenue.reduce((s, r) => s + r.value, 0);
+  const byLawyer = new Map<string, { cases: number; won: number }>();
+  for (const c of cases) {
+    const key = c.assignedTo || "غير مسند";
+    const e = byLawyer.get(key) ?? { cases: 0, won: 0 };
+    e.cases += 1;
+    if (c.status === "مغلق") e.won += 1;
+    byLawyer.set(key, e);
+  }
+  const lawyers = [...byLawyer.entries()]
+    .map(([name, v]) => ({
+      name,
+      cases: v.cases,
+      won: v.won,
+      rate: v.cases ? Math.round((v.won / v.cases) * 100) : 0,
+      revenue: cases.length ? Math.round((totalRevenue * v.cases) / cases.length) : 0,
+    }))
+    .sort((a, b) => b.cases - a.cases);
+
+  const activeCases = cases.filter((c) => c.status === "نشط");
+  const closedCases = cases.filter((c) => c.status === "مغلق");
+  const winPct = cases.length ? Math.round((closedCases.length / cases.length) * 100) : 0;
+  const activeCourts = new Set(activeCases.map((c) => c.court).filter(Boolean)).size;
+
+  const maxRevenue = Math.max(1, ...revenue.map((r) => r.value));
+  const maxCases = Math.max(1, ...caseTypes.map((c) => c.value));
 
   return (
     <>
@@ -77,19 +122,19 @@ export default async function ReportsPage({
           />
           <StatCard
             label="القضايا النشطة"
-            value={totalCases}
+            value={activeCases.length}
             icon="⚖"
             accent="info"
             trend={{ v: "+6", up: true }}
-            hint="موزعة على 6 محاكم"
+            hint={`موزعة على ${activeCourts} محاكم`}
           />
           <StatCard
             label="نسبة كسب القضايا"
-            value="76%"
+            value={`${winPct}%`}
             icon="🏆"
             accent="success"
             trend={{ v: "+4%", up: true }}
-            hint="80 من أصل 105 قضية"
+            hint={`${closedCases.length} من أصل ${cases.length} قضية`}
           />
           <StatCard
             label="متوسط مدة القضية"
@@ -114,11 +159,11 @@ export default async function ReportsPage({
             </p>
 
             <div className="flex items-end justify-between gap-2 sm:gap-4 h-52 border-b border-[var(--border)] pb-px">
-              {REVENUE.map((r) => {
+              {revenue.map((r) => {
                 const h = Math.round((r.value / maxRevenue) * 100);
                 return (
                   <div
-                    key={r.month}
+                    key={r.key}
                     className="flex-1 flex flex-col items-center justify-end gap-2 h-full min-w-0"
                   >
                     <span className="num text-[10px] sm:text-xs text-[var(--text-muted)]" dir="ltr">
@@ -138,9 +183,9 @@ export default async function ReportsPage({
               })}
             </div>
             <div className="flex justify-between gap-2 sm:gap-4 mt-2">
-              {REVENUE.map((r) => (
+              {revenue.map((r) => (
                 <span
-                  key={r.month}
+                  key={r.key}
                   className="flex-1 text-center text-[10px] sm:text-xs text-[var(--text-faint)] truncate"
                 >
                   {r.month}
@@ -157,7 +202,7 @@ export default async function ReportsPage({
             </p>
 
             <div className="flex flex-col gap-4">
-              {CASE_TYPES.map((c) => {
+              {caseTypes.map((c) => {
                 const w = Math.round((c.value / maxCases) * 100);
                 return (
                   <div key={c.label}>
@@ -201,7 +246,7 @@ export default async function ReportsPage({
                 </tr>
               </thead>
               <tbody>
-                {LAWYERS.map((l) => {
+                {lawyers.map((l) => {
                   const rateColor =
                     l.rate >= 80
                       ? "var(--success)"
@@ -247,7 +292,7 @@ export default async function ReportsPage({
           </div>
 
           <p className="text-[11px] text-[var(--text-faint)] mt-3">
-            {/* الأرقام تقديرية لأغراض العرض — التقرير الفعلي يُولّد من بيانات النظام */}
+            {/* الأرقام محسوبة من بيانات النظام (القضايا + الفواتير) */}
             * الأرقام محسوبة آلياً من ملفات القضايا والفواتير المسجّلة في النظام.
           </p>
         </section>

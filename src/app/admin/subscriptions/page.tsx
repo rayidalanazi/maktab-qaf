@@ -1,6 +1,14 @@
+"use client";
+
+import { useMemo } from "react";
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { StatCard } from "@/components/app/StatCard";
+import { useAdminData } from "@/hooks/useAdminData";
+import { fetchAdminTenants } from "@/lib/data/queries";
+import type { AdminTenantRow } from "@/lib/data/types";
+import { ADMIN_TENANTS } from "@/data/admin-mock";
+import { getBundle } from "@/data/pricing";
 
 type SubStatus = "نشط" | "معلّق" | "ملغى";
 type Cycle = "شهري" | "سنوي";
@@ -16,17 +24,39 @@ interface Subscription {
   status: SubStatus;
 }
 
-const SUBSCRIPTIONS: Subscription[] = [
-  { id: "SUB-1042", firm: "شركة رائد للمحاماة", plan: "الاحترافية", cycle: "سنوي", price: 14400, startDate: "2025-06-01", renewDate: "2026-06-01", status: "نشط" },
-  { id: "SUB-1039", firm: "مكتب الفيصل", plan: "النمو", cycle: "شهري", price: 799, startDate: "2026-01-15", renewDate: "2026-06-15", status: "نشط" },
-  { id: "SUB-1036", firm: "مكتب القحطاني", plan: "الاحترافية", cycle: "شهري", price: 1499, startDate: "2025-11-20", renewDate: "2026-06-20", status: "نشط" },
-  { id: "SUB-1031", firm: "مكتب الخوري", plan: "النمو", cycle: "سنوي", price: 7680, startDate: "2025-03-10", renewDate: "2026-03-10", status: "معلّق" },
-  { id: "SUB-1028", firm: "مكتب المطيري", plan: "البداية", cycle: "شهري", price: 299, startDate: "2026-02-01", renewDate: "2026-06-01", status: "نشط" },
-  { id: "SUB-1024", firm: "مكتب الشمري", plan: "الاحترافية", cycle: "سنوي", price: 14400, startDate: "2024-12-05", renewDate: "2025-12-05", status: "ملغى" },
-  { id: "SUB-1019", firm: "مكتب العنزي", plan: "النمو", cycle: "شهري", price: 799, startDate: "2026-04-18", renewDate: "2026-06-18", status: "نشط" },
-  { id: "SUB-1015", firm: "مؤسسة العتيبي", plan: "البداية", cycle: "شهري", price: 299, startDate: "2025-09-22", renewDate: "2026-06-22", status: "معلّق" },
-  { id: "SUB-1008", firm: "مكتب الفيصل", plan: "البداية", cycle: "سنوي", price: 2880, startDate: "2024-08-30", renewDate: "2025-08-30", status: "ملغى" },
-];
+const PLAN_KEY: Record<string, string> = {
+  "الأساس": "bundle_base",
+  "الأساس + إضافات": "bundle_base",
+  "صغير": "bundle_small",
+  "متوسط": "bundle_medium",
+  "Enterprise": "bundle_enterprise",
+};
+
+function addDays(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+// Demo fallback — كل مستأجر = اشتراك. Shaped like AdminTenantRow.
+const FALLBACK_TENANTS: AdminTenantRow[] = ADMIN_TENANTS.map((t) => ({
+  id: String(t.id),
+  slug: t.slug,
+  name: t.name,
+  plan: PLAN_KEY[t.plan] ?? "bundle_base",
+  status: t.status === "تجربة" ? "trialing" : t.status === "متأخر دفع" ? "past_due" : "active",
+  enabledAddons: [],
+  trialEndsAt: t.trial ? addDays(t.signedUp, 14) : null,
+  createdAt: t.signedUp,
+}));
+
+const STATUS_AR: Record<string, SubStatus> = {
+  active: "نشط",
+  trialing: "نشط",
+  past_due: "معلّق",
+  suspended: "معلّق",
+  cancelled: "ملغى",
+};
 
 const STATUS_COLOR: Record<SubStatus, string> = {
   "نشط": "var(--success)",
@@ -41,26 +71,46 @@ const FILTERS: { label: string; active: boolean }[] = [
   { label: "ملغى", active: false },
 ];
 
-// Monthly Recurring Revenue: normalize annual plans to a monthly figure, active only.
-const MRR = SUBSCRIPTIONS.filter((s) => s.status === "نشط").reduce(
-  (sum, s) => sum + (s.cycle === "سنوي" ? Math.round(s.price / 12) : s.price),
-  0
-);
-
-const COUNTS = {
-  active: SUBSCRIPTIONS.filter((s) => s.status === "نشط").length,
-  held: SUBSCRIPTIONS.filter((s) => s.status === "معلّق").length,
-  cancelled: SUBSCRIPTIONS.filter((s) => s.status === "ملغى").length,
-};
-
 export default function SubscriptionsPage() {
+  const { data: tenants } = useAdminData(fetchAdminTenants, FALLBACK_TENANTS);
+
+  const subscriptions = useMemo<Subscription[]>(
+    () =>
+      tenants.map((t): Subscription => {
+        const bundle = getBundle(t.plan);
+        return {
+          id: t.slug,
+          firm: t.name,
+          plan: bundle?.name_ar ?? t.plan,
+          cycle: "شهري",
+          price: bundle?.price_monthly_sar ?? 0,
+          startDate: t.createdAt,
+          renewDate: t.trialEndsAt ?? "—",
+          status: STATUS_AR[t.status] ?? "نشط",
+        };
+      }),
+    [tenants],
+  );
+
+  // Monthly Recurring Revenue: normalize annual plans to a monthly figure, active only.
+  const MRR = subscriptions.filter((s) => s.status === "نشط").reduce(
+    (sum, s) => sum + (s.cycle === "سنوي" ? Math.round(s.price / 12) : s.price),
+    0
+  );
+
+  const COUNTS = {
+    active: subscriptions.filter((s) => s.status === "نشط").length,
+    held: subscriptions.filter((s) => s.status === "معلّق").length,
+    cancelled: subscriptions.filter((s) => s.status === "ملغى").length,
+  };
+
   return (
     <>
       <Topbar title="الاشتراكات" breadcrumb={["Admin", "الاشتراكات"]} />
       <main className="p-4 sm:p-6 max-w-7xl w-full">
         <PageHeader
           title="الاشتراكات"
-          sub={`${SUBSCRIPTIONS.length} اشتراك عبر كل المكاتب`}
+          sub={`${subscriptions.length} اشتراك عبر كل المكاتب`}
           actions={<button className="btn btn-ghost text-sm py-2.5">📥 تصدير</button>}
         />
 
@@ -136,7 +186,7 @@ export default function SubscriptionsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
-              {SUBSCRIPTIONS.map((s) => (
+              {subscriptions.map((s) => (
                 <tr key={s.id} className="hover:bg-[var(--bg-hover)] transition-colors">
                   <td className="p-3">
                     <div className="font-bold text-sm">{s.firm}</div>

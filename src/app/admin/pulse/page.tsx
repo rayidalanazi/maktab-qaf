@@ -1,6 +1,35 @@
+"use client";
+
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { StatCard } from "@/components/app/StatCard";
+import { useAdminData } from "@/hooks/useAdminData";
+import { fetchAdminTenants, fetchAdminUsers } from "@/lib/data/queries";
+import type { AdminTenantRow, AdminUserRow } from "@/lib/data/types";
+import { ADMIN_TENANTS, ADMIN_USERS, ADMIN_TENANT_ADDONS } from "@/data/admin-mock";
+
+// Demo fallback — admin-mock rows reshaped into the live row shapes.
+const FALLBACK_TENANTS: AdminTenantRow[] = ADMIN_TENANTS.map((t) => ({
+  id: String(t.id),
+  slug: t.slug,
+  name: t.name,
+  plan: t.plan,
+  status: t.status === "نشط" ? "active" : t.status === "تجربة" ? "trialing" : "past_due",
+  enabledAddons: ADMIN_TENANT_ADDONS[t.slug] ?? [],
+  trialEndsAt: null,
+  createdAt: t.signedUp,
+}));
+
+const FALLBACK_USERS: AdminUserRow[] = ADMIN_USERS.map((u) => ({
+  id: String(u.id),
+  name: u.name,
+  email: u.email,
+  role: u.roleKey,
+  status: u.status === "نشط" ? "active" : u.status === "معطل" ? "disabled" : "invited",
+  tenantId: u.tenantSlug,
+  lastSeen: u.lastLogin,
+  createdAt: u.createdAt,
+}));
 
 // أحداث حيّة — أحدث 8 أحداث على المنصة
 const EVENTS = [
@@ -45,7 +74,11 @@ const STATUS_STYLE: Record<string, { color: string; label: string }> = {
 };
 
 export default function PulsePage() {
+  const { data: tenants } = useAdminData(fetchAdminTenants, FALLBACK_TENANTS);
+  const { data: users } = useAdminData(fetchAdminUsers, FALLBACK_USERS);
+
   const peak = Math.max(...HOURLY.map((p) => p.v));
+  const activeUsers = users.filter((u) => u.status === "active").length;
 
   return (
     <>
@@ -78,7 +111,7 @@ export default function PulsePage() {
         />
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-          <StatCard label="مستخدمون متصلون الآن" value={23} icon="🟢" accent="success" trend={{ v: "+5", up: true }} hint="عبر 11 مكتباً" />
+          <StatCard label="مستخدمون متصلون الآن" value={activeUsers} icon="🟢" accent="success" trend={{ v: "+5", up: true }} hint={`عبر ${tenants.length} مكتباً`} />
           <StatCard label="أحداث اليوم" value={"1٬284"} icon="⚡" accent="brand" trend={{ v: "+12%", up: true }} hint="مقارنة بالأمس" />
           <StatCard label="صحة النظام" value={"99.6%"} icon="❤️" accent="info" hint="جميع الخدمات تعمل" />
           <StatCard label="آخر مزامنة" value={"الآن"} icon="🔄" accent="accent" hint="2026-06-10 13:42" />

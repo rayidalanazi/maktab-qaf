@@ -1,12 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { StatCard } from "@/components/app/StatCard";
 import { GrantFeatureDialog } from "@/components/admin/GrantFeatureDialog";
-import { ADMIN_GRANTS } from "@/data/admin-mock";
+import { useAdminData } from "@/hooks/useAdminData";
+import { expireGrant, fetchAdminGrants, fetchAdminTenants, grantFeature } from "@/lib/data/queries";
+import type { AdminGrantRow, AdminTenantRow } from "@/lib/data/types";
+import { ADMIN_GRANTS, ADMIN_TENANTS } from "@/data/admin-mock";
 
 const STATUS_COLOR: Record<string, string> = {
   "نشط": "var(--success)",
@@ -22,11 +25,81 @@ const TYPE_LABEL: Record<string, string> = {
   comp_seats: "مقاعد مجانية",
 };
 
+/* English status keys (live data) → Arabic. Mock rows already carry Arabic. */
+const STATUS_AR: Record<string, string> = {
+  active: "نشط",
+  expired: "منتهٍ",
+};
+
+type GrantRow = AdminGrantRow & { daysLeft?: number | null };
+
+/* Demo fallback — the existing mock reshaped into the live row shape.
+   tenantId carries the slug; the join below resolves by id OR slug.
+   daysLeft stays hardcoded from the mock (hydration-safe). */
+const FALLBACK_GRANTS: GrantRow[] = ADMIN_GRANTS.map((g) => ({
+  id: String(g.id),
+  tenantId: g.tenantSlug,
+  grantType: g.type,
+  label: g.label,
+  addonKey: null,
+  startsAt: g.startsAt,
+  expiresAt: g.expiresAt,
+  autoConvert: g.autoConvert,
+  reason: g.reason,
+  status: g.status,
+  daysLeft: g.daysLeft,
+}));
+
+const FALLBACK_TENANTS: AdminTenantRow[] = ADMIN_TENANTS.map((t) => ({
+  id: String(t.id),
+  slug: t.slug,
+  name: t.name,
+  plan: t.plan,
+  status: t.status,
+  enabledAddons: [],
+  trialEndsAt: null,
+  createdAt: t.signedUp,
+}));
+
 export default function AdminGrantsPage() {
   const [grantOpen, setGrantOpen] = useState(false);
+  // Current time captured AFTER mount only — keeps prerender/hydration identical.
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => { setNow(Date.now()); }, []);
 
-  const active = ADMIN_GRANTS.filter((g) => g.status === "نشط").length;
-  const expiring = ADMIN_GRANTS.filter((g) => g.status === "قارب الانتهاء").length;
+  const { data: grantRows, isLive, reload } = useAdminData<GrantRow>(fetchAdminGrants, FALLBACK_GRANTS);
+  const { data: tenants } = useAdminData(fetchAdminTenants, FALLBACK_TENANTS);
+
+  const grants = useMemo(() => {
+    const tenantByKey = new Map<string, AdminTenantRow>();
+    for (const t of tenants) {
+      tenantByKey.set(t.id, t);
+      tenantByKey.set(t.slug, t);
+    }
+    return grantRows.map((g) => {
+      const t = tenantByKey.get(g.tenantId);
+      const daysLeft: number | null =
+        g.daysLeft !== undefined
+          ? g.daysLeft
+          : !g.expiresAt || now === null
+            ? null
+            : Math.max(0, Math.ceil((new Date(g.expiresAt).getTime() - now) / 86_400_000));
+      const status =
+        g.status === "active"
+          ? (daysLeft !== null && daysLeft <= 3 ? "قارب الانتهاء" : "نشط")
+          : (STATUS_AR[g.status] ?? g.status);
+      return {
+        ...g,
+        daysLeft,
+        status,
+        tenantSlug: t?.slug ?? "",
+        tenantName: t?.name ?? "—",
+      };
+    });
+  }, [grantRows, tenants, now]);
+
+  const active = grants.filter((g) => g.status === "نشط").length;
+  const expiring = grants.filter((g) => g.status === "قارب الانتهاء").length;
 
   return (
     <>
@@ -45,8 +118,8 @@ export default function AdminGrantsPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
           <StatCard label="منح نشطة" value={active} icon="🎁" accent="brand" />
           <StatCard label="قاربت الانتهاء" value={expiring} icon="⏳" accent="warn" hint="خلال أيام" />
-          <StatCard label="إجمالي المنح" value={ADMIN_GRANTS.length} icon="📦" accent="info" />
-          <StatCard label="ستتحوّل لمدفوعة" value={ADMIN_GRANTS.filter(g => g.autoConvert).length} icon="💰" accent="success" hint="عند الانتهاء" />
+          <StatCard label="إجمالي المنح" value={grants.length} icon="📦" accent="info" />
+          <StatCard label="ستتحوّل لمدفوعة" value={grants.filter(g => g.autoConvert).length} icon="💰" accent="success" hint="عند الانتهاء" />
         </div>
 
         <div className="card !p-0 overflow-x-auto">
@@ -64,14 +137,14 @@ export default function AdminGrantsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
-              {ADMIN_GRANTS.map((g) => (
+              {grants.map((g) => (
                 <tr key={g.id} className="hover:bg-[var(--bg-hover)]">
                   <td className="p-3">
                     <Link href={`/admin/tenants/${g.tenantSlug}`} className="text-xs font-bold text-[var(--brand)] hover:underline">
                       {g.tenantName}
                     </Link>
                   </td>
-                  <td className="p-3 text-xs text-[var(--text-muted)]">{TYPE_LABEL[g.type]}</td>
+                  <td className="p-3 text-xs text-[var(--text-muted)]">{TYPE_LABEL[g.grantType] ?? g.grantType}</td>
                   <td className="p-3 text-xs font-semibold">{g.label}</td>
                   <td className="p-3 text-xs font-mono text-[var(--text-faint)]" dir="ltr">{g.startsAt}</td>
                   <td className="p-3 text-xs font-mono text-[var(--text-faint)]" dir="ltr">{g.expiresAt || "دائم"}</td>
@@ -88,6 +161,15 @@ export default function AdminGrantsPage() {
                       style={{ background: `color-mix(in srgb, ${STATUS_COLOR[g.status]} 15%, transparent)`, color: STATUS_COLOR[g.status] }}>
                       ● {g.status}
                     </span>
+                    {isLive && g.status !== "منتهٍ" && (
+                      <button
+                        onClick={() => { void expireGrant(g.id).then(reload); }}
+                        className="ms-2 text-[10px] text-[var(--danger)] hover:underline"
+                        title="إيقاف المنحة الآن"
+                      >
+                        إيقاف
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -100,7 +182,12 @@ export default function AdminGrantsPage() {
         </div>
       </main>
 
-      <GrantFeatureDialog open={grantOpen} onClose={() => setGrantOpen(false)} />
+      <GrantFeatureDialog
+        open={grantOpen}
+        onClose={() => setGrantOpen(false)}
+        tenants={tenants}
+        onGrant={isLive ? async (args) => { await grantFeature(args); reload(); } : undefined}
+      />
     </>
   );
 }

@@ -1,9 +1,14 @@
+"use client";
+
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { StatCard } from "@/components/app/StatCard";
+import { useQafData } from "@/hooks/useQafData";
+import { fetchTickets } from "@/lib/data/queries";
+import type { TicketItem } from "@/lib/data/types";
 
 /* ============================================================
-   Mock data — self-contained
+   Static content + demo fallback
    ============================================================ */
 
 const CONTACT_CHANNELS = [
@@ -74,15 +79,18 @@ const FAQ_ITEMS = [
 
 type TicketStatus = "open" | "in_progress" | "resolved";
 
-const TICKETS: {
-  id: string;
+type DisplayTicket = {
+  id: string | number;
   subject: string;
   category: string;
   status: TicketStatus;
   agent: string;
   created: string;
   updated: string;
-}[] = [
+};
+
+// Demo fallback (shown only when no firm/DB yet).
+const FALLBACK_TICKETS: DisplayTicket[] = [
   {
     id: "QAF-1042",
     subject: "خطأ عند رفع مستند PDF أكبر من 20 ميجابايت",
@@ -112,6 +120,21 @@ const TICKETS: {
   },
 ];
 
+/** Map a real qaf_support_tickets row (TicketItem) into the page's display shape. */
+function toDisplay(t: TicketItem): DisplayTicket {
+  const status: TicketStatus =
+    t.status === "in_progress" || t.status === "resolved" ? t.status : "open";
+  return {
+    id: t.id,
+    subject: t.subject,
+    category: t.priority,
+    status,
+    agent: t.requester || "بانتظار الرد",
+    created: t.created,
+    updated: t.created,
+  };
+}
+
 const STATUS_META: Record<TicketStatus, { label: string; color: string }> = {
   open: { label: "مفتوحة", color: "var(--warn)" },
   in_progress: { label: "قيد المعالجة", color: "var(--info)" },
@@ -130,10 +153,13 @@ const ACCENT_VARS: Record<string, string> = {
    Page
    ============================================================ */
 
-export default async function SupportPage({ params }: { params: Promise<{ tenant: string }> }) {
-  await params;
+export default function SupportPage() {
+  const { data: tickets } = useQafData<DisplayTicket>(
+    () => fetchTickets().then((rows) => rows.map(toDisplay)),
+    FALLBACK_TICKETS,
+  );
 
-  const openCount = TICKETS.filter((t) => t.status !== "resolved").length;
+  const openCount = tickets.filter((t) => t.status !== "resolved").length;
 
   return (
     <>
@@ -244,7 +270,7 @@ export default async function SupportPage({ params }: { params: Promise<{ tenant
           </div>
 
           <div className="space-y-2">
-            {TICKETS.map((t) => {
+            {tickets.map((t) => {
               const meta = STATUS_META[t.status];
               return (
                 <div key={t.id} className="card !p-4 flex flex-col gap-3">

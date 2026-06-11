@@ -1,6 +1,25 @@
+"use client";
+
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { StatCard } from "@/components/app/StatCard";
+import { useAdminData } from "@/hooks/useAdminData";
+import { fetchAdminTenants } from "@/lib/data/queries";
+import type { AdminTenantRow } from "@/lib/data/types";
+import { ADMIN_TENANTS } from "@/data/admin-mock";
+import { getBundle } from "@/data/pricing";
+
+// Demo fallback — admin-mock tenants reshaped into the live row shape.
+const FALLBACK_TENANTS: AdminTenantRow[] = ADMIN_TENANTS.map((t) => ({
+  id: String(t.id),
+  slug: t.slug,
+  name: t.name,
+  plan: t.plan,
+  status: t.status === "نشط" ? "active" : t.status === "تجربة" ? "trialing" : "past_due",
+  enabledAddons: [],
+  trialEndsAt: null,
+  createdAt: t.signedUp,
+}));
 
 // ── Mock data ────────────────────────────────────────────────────────────────
 
@@ -67,12 +86,51 @@ const REASON_COLOR: Record<string, string> = {
   "لم يدخل 14 يوم": "var(--danger)",
   "دفعة متأخرة": "var(--warn)",
   "استخدام منخفض": "var(--accent)",
+  "حساب موقوف": "var(--danger)",
+  "ألغى الاشتراك": "var(--accent)",
+};
+
+// In LIVE mode, at-risk rows are derived from tenant status.
+const STATUS_RISK: Record<string, { reason: string; level: RiskLevel; action: string }> = {
+  past_due: { reason: "دفعة متأخرة", level: "عالٍ", action: "تسوية الفاتورة + تفعيل التذكير الآلي" },
+  suspended: { reason: "حساب موقوف", level: "عالٍ", action: "تواصل مباشر من فريق النجاح لإعادة التفعيل" },
+  cancelled: { reason: "ألغى الاشتراك", level: "متوسط", action: "مقابلة خروج + عرض استرجاع مخصّص" },
 };
 
 // ──────────────────────────────────────────────────────────────────────────────
 
 export default function AdminChurnPage() {
-  const exposedMRR = AT_RISK.reduce((s, f) => s + f.mrr, 0);
+  const { data: tenants, isLive } = useAdminData(fetchAdminTenants, FALLBACK_TENANTS);
+
+  const atRisk = isLive
+    ? tenants
+        .filter((t) => t.status in STATUS_RISK)
+        .map((t) => {
+          const meta = STATUS_RISK[t.status];
+          const bundle = getBundle(t.plan);
+          return {
+            firm: t.name,
+            plan: bundle?.name_ar ?? t.plan,
+            reason: meta.reason,
+            mrr: bundle?.price_monthly_sar ?? 0,
+            level: meta.level,
+            action: meta.action,
+          };
+        })
+    : AT_RISK;
+
+  const exposedMRR = atRisk.reduce((s, f) => s + f.mrr, 0);
+
+  const gone = tenants.filter((t) => t.status === "cancelled" || t.status === "suspended");
+  const churnRate = isLive
+    ? `${tenants.length ? ((gone.length / tenants.length) * 100).toFixed(1) : "0.0"}%`
+    : "2.8%";
+  const retentionRate = isLive
+    ? `${tenants.length ? (100 - (gone.length / tenants.length) * 100).toFixed(1) : "100.0"}%`
+    : "97.2%";
+  const lostRevenue = isLive
+    ? gone.reduce((s, t) => s + (getBundle(t.plan)?.price_monthly_sar ?? 0), 0).toLocaleString()
+    : "6,420";
 
   return (
     <>
@@ -87,7 +145,7 @@ export default function AdminChurnPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
           <StatCard
             label="معدل التغبّن الشهري"
-            value="2.8%"
+            value={churnRate}
             icon="📉"
             accent="warn"
             trend={{ v: "0.4%", up: false }}
@@ -95,7 +153,7 @@ export default function AdminChurnPage() {
           />
           <StatCard
             label="الإيراد المفقود"
-            value="6,420"
+            value={lostRevenue}
             icon="💸"
             accent="brand"
             hint="ر.س / آخر 30 يوماً"
@@ -109,7 +167,7 @@ export default function AdminChurnPage() {
           />
           <StatCard
             label="معدل الاحتفاظ"
-            value="97.2%"
+            value={retentionRate}
             icon="🛡️"
             accent="success"
             trend={{ v: "0.4%", up: true }}
@@ -154,7 +212,7 @@ export default function AdminChurnPage() {
               <div className="p-3 rounded-lg bg-[var(--bg-hover)]">
                 <div className="text-[11px] text-[var(--text-muted)] mb-1">مكاتب معرّضة</div>
                 <div className="num font-display font-black text-2xl text-[var(--danger)]" dir="ltr">
-                  {AT_RISK.length}
+                  {atRisk.length}
                 </div>
               </div>
               <div className="p-3 rounded-lg bg-[var(--bg-hover)]">
@@ -183,7 +241,7 @@ export default function AdminChurnPage() {
               السعر هو السبب الأبرز للإلغاء (38%). التركيز على المكاتب التي لم
               تسجّل دخولاً منذ 14 يوماً يحمي{" "}
               <span className="num font-mono text-[var(--text)]" dir="ltr">
-                {AT_RISK.filter((f) => f.reason === "لم يدخل 14 يوم")
+                {atRisk.filter((f) => f.reason === "لم يدخل 14 يوم")
                   .reduce((s, f) => s + f.mrr, 0)
                   .toLocaleString()}
               </span>{" "}
@@ -196,7 +254,7 @@ export default function AdminChurnPage() {
         <div className="flex items-center justify-between mb-3">
           <div className="font-bold">مكاتب معرّضة للخطر</div>
           <span className="text-[11px] text-[var(--text-faint)] num" dir="ltr">
-            {AT_RISK.length} مكاتب
+            {atRisk.length} مكاتب
           </span>
         </div>
         <div className="card !p-0 overflow-x-auto">
@@ -211,7 +269,7 @@ export default function AdminChurnPage() {
               </tr>
             </thead>
             <tbody>
-              {AT_RISK.map((f) => (
+              {atRisk.map((f) => (
                 <tr
                   key={f.firm}
                   className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-hover)]"

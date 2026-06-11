@@ -18,7 +18,7 @@ import {
 } from "react";
 import { getSupabase } from "@/lib/supabase/client";
 import {
-  fetchMyProfile, fetchMyTenant, maybeProvisionPendingFirm, QafDbError,
+  fetchMyProfile, fetchMyTenant, maybeProvisionPendingFirm, isPlatformAdmin, QafDbError,
 } from "@/lib/data/queries";
 import type { QafProfile, QafTenant } from "@/lib/data/types";
 
@@ -32,6 +32,8 @@ interface SessionState {
   tenant: QafTenant | null;
   /** convenience: true once a signed-in user has a provisioned firm */
   isReal: boolean;
+  /** true when the signed-in user is a قاف platform operator (qaf_platform_admins) */
+  isOperator: boolean;
   /** force a re-fetch (e.g. right after provisioning) */
   refresh: () => void;
 }
@@ -44,6 +46,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [email, setEmail] = useState<string | null>(null);
   const [profile, setProfile] = useState<QafProfile | null>(null);
   const [tenant, setTenant] = useState<QafTenant | null>(null);
+  const [isOperator, setIsOperator] = useState(false);
   const resolveRef = useRef<() => void>(() => {});
 
   useEffect(() => {
@@ -56,6 +59,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (!session) {
         if (!cancelled) {
           setUserId(null); setEmail(null); setProfile(null); setTenant(null);
+          setIsOperator(false);
           setMode("demo");
         }
         return;
@@ -64,6 +68,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setUserId(session.user.id);
         setEmail(session.user.email ?? null);
       }
+      // Operator check runs in parallel with profile resolution — non-blocking.
+      isPlatformAdmin()
+        .then((v) => { if (!cancelled) setIsOperator(v); })
+        .catch(() => { if (!cancelled) setIsOperator(false); });
       try {
         let prof = await fetchMyProfile();
         if (!prof || !prof.tenant_id) {
@@ -126,8 +134,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     profile,
     tenant,
     isReal: mode === "real",
+    isOperator,
     refresh: () => resolveRef.current(),
-  }), [mode, userId, email, profile, tenant]);
+  }), [mode, userId, email, profile, tenant, isOperator]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -139,7 +148,7 @@ export function useSession(): SessionState {
     // call useSession() harmlessly — they just get a static demo state.
     return {
       mode: "demo", userId: null, email: null, profile: null, tenant: null,
-      isReal: false, refresh: () => {},
+      isReal: false, isOperator: false, refresh: () => {},
     };
   }
   return ctx;

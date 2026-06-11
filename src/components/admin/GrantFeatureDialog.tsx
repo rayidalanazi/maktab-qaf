@@ -24,17 +24,31 @@ const DURATIONS = [
   { d: 0, label: "دائم" },
 ];
 
+type TenantOption = { id: string | number; slug: string; name: string; plan: string };
+
 interface Props {
   open: boolean;
   onClose: () => void;
   /** Pre-select a tenant (when opened from a tenant page). */
   tenantSlug?: string;
+  /** Tenant options (live rows or mapped mocks). Defaults to the built-in mock list. */
+  tenants?: TenantOption[];
+  /** LIVE mode: persist the grant. Demo (undefined) keeps the local-only behavior. */
+  onGrant?: (args: {
+    tenantId: string;
+    addonKey: string;
+    label: string;
+    expiresAt: string | null;
+    reason: string;
+    grantType: GrantType;
+  }) => Promise<void> | void;
 }
 
-export function GrantFeatureDialog({ open, onClose, tenantSlug }: Props) {
+export function GrantFeatureDialog({ open, onClose, tenantSlug, tenants, onGrant }: Props) {
   const { toast } = useToast();
+  const tenantList: TenantOption[] = tenants && tenants.length > 0 ? tenants : ADMIN_TENANTS;
   const [type, setType] = useState<GrantType>("free_addon");
-  const [tenant, setTenant] = useState(tenantSlug || ADMIN_TENANTS[0].slug);
+  const [tenant, setTenant] = useState(tenantSlug || tenantList[0].slug);
   const [addonKey, setAddonKey] = useState(ADDONS.find((a) => a.price_monthly_sar > 0)?.key || "");
   const [bundleKey, setBundleKey] = useState(BUNDLES[2]?.key || "");
   const [days, setDays] = useState(14);
@@ -44,7 +58,8 @@ export function GrantFeatureDialog({ open, onClose, tenantSlug }: Props) {
   const [notify, setNotify] = useState(true);
   const [autoConvert, setAutoConvert] = useState(false);
 
-  const tenantName = ADMIN_TENANTS.find((t) => t.slug === tenant)?.name || tenant;
+  const selectedTenant = tenantList.find((t) => t.slug === tenant) ?? tenantList[0];
+  const tenantName = selectedTenant?.name || tenant;
 
   const summary = useMemo(() => {
     const dur = days === 0 ? "بشكل دائم" : `لمدة ${days} يوم`;
@@ -67,8 +82,29 @@ export function GrantFeatureDialog({ open, onClose, tenantSlug }: Props) {
   }, [type, addonKey, bundleKey, days, percent, seats, tenantName]);
 
   function submit() {
-    // No backend yet — confirm the action visually + log the intent.
-    // Production: POST /api/admin/grants → inserts a Grant row, updates tenant_addons.
+    if (onGrant && selectedTenant) {
+      // LIVE — persist the grant (insert + enable addon), then confirm.
+      const expiresAt = days === 0 ? null : new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+      const grantedKey = type === "free_addon" ? addonKey : type === "free_upgrade" ? bundleKey : type;
+      const label =
+        type === "free_addon" ? (ADDONS.find((x) => x.key === addonKey)?.name_ar ?? addonKey)
+        : type === "free_upgrade" ? `ترقية لباقة ${BUNDLES.find((x) => x.key === bundleKey)?.name_ar ?? bundleKey}`
+        : type === "extended_trial" ? `تمديد التجربة ${days} يوم`
+        : type === "discount" ? `خصم ${percent}%`
+        : `${seats} مقاعد مجانية`;
+      void Promise.resolve(onGrant({
+        tenantId: String(selectedTenant.id),
+        addonKey: grantedKey,
+        label,
+        expiresAt,
+        reason,
+        grantType: type,
+      }))
+        .then(() => { toast(summary || "تم المنح", "success"); onClose(); })
+        .catch((e) => toast(e instanceof Error ? e.message : String(e), "warn"));
+      return;
+    }
+    // Demo — no backend: confirm the action visually + log the intent.
     // eslint-disable-next-line no-console
     console.log("[grant]", { type, tenant, addonKey, bundleKey, days, percent, seats, reason, notify, autoConvert });
     toast(summary || "تم المنح", "success");
@@ -124,8 +160,8 @@ export function GrantFeatureDialog({ open, onClose, tenantSlug }: Props) {
       {/* Tenant */}
       {field(
         "المكتب",
-        <select value={tenant} onChange={(e) => setTenant(e.target.value)} className={selectCls}>
-          {ADMIN_TENANTS.map((t) => (
+        <select value={selectedTenant?.slug ?? tenant} onChange={(e) => setTenant(e.target.value)} className={selectCls}>
+          {tenantList.map((t) => (
             <option key={t.slug} value={t.slug}>{t.name} — {t.plan}</option>
           ))}
         </select>,

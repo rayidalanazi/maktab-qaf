@@ -1,124 +1,38 @@
+"use client";
+
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { StatCard } from "@/components/app/StatCard";
+import { useQafData } from "@/hooks/useQafData";
+import { fetchClients } from "@/lib/data/queries";
+import type { ClientItem } from "@/lib/data/types";
 
-type Urgency = "danger" | "warn" | "success";
-
-interface ClientCase {
-  client: string;
-  org: string;
-  subject: string;
-  court: string;
-  lawyer: string;
-  deadline: string;
-  daysLeft: number;
-  caseNo: string;
-}
-
-const URGENCY_VAR: Record<Urgency, string> = {
-  danger: "var(--danger)",
-  warn: "var(--warn)",
-  success: "var(--success)",
+const STATUS_COLOR: Record<string, string> = {
+  "نشط": "var(--success)",
+  "معلق": "var(--warn)",
+  "مغلق": "var(--text-faint)",
 };
 
-function urgencyOf(days: number): Urgency {
-  if (days <= 3) return "danger";
-  if (days <= 10) return "warn";
-  return "success";
+function statusColor(s: string): string {
+  return STATUS_COLOR[s] ?? "var(--success)";
 }
 
-function urgencyLabel(days: number): string {
-  if (days < 0) return "متأخر";
-  if (days === 0) return "اليوم";
-  if (days <= 3) return "عاجل جدًا";
-  if (days <= 10) return "قريب";
-  return "في الوقت";
-}
-
-const CASES: ClientCase[] = [
-  {
-    client: "عبدالعزيز الدوسري",
-    org: "شركة نجد للمقاولات",
-    subject: "مطالبة مالية ومستحقات عقد توريد",
-    court: "المحكمة التجارية بالرياض",
-    lawyer: "أ. سارة القحطاني",
-    deadline: "2026-06-12",
-    daysLeft: 2,
-    caseNo: "TJ-4471",
-  },
-  {
-    client: "نورة الشهري",
-    org: "مؤسسة الشهري التجارية",
-    subject: "نزاع على حضانة وزيارة",
-    court: "محكمة الأحوال الشخصية بالرياض",
-    lawyer: "أ. خالد العتيبي",
-    deadline: "2026-06-13",
-    daysLeft: 3,
-    caseNo: "AH-2098",
-  },
-  {
-    client: "فهد بن سعد المطيري",
-    org: "مصنع المطيري للبلاستيك",
-    subject: "دعوى فصل تعسفي ومكافأة نهاية خدمة",
-    court: "المحكمة العمالية بالرياض",
-    lawyer: "أ. ريم الغامدي",
-    deadline: "2026-06-18",
-    daysLeft: 8,
-    caseNo: "LB-1320",
-  },
-  {
-    client: "هند العنزي",
-    org: "—",
-    subject: "اعتراض على قرار إداري",
-    court: "المحكمة الإدارية بالرياض",
-    lawyer: "أ. ماجد الحربي",
-    deadline: "2026-06-22",
-    daysLeft: 12,
-    caseNo: "AD-0775",
-  },
-  {
-    client: "تركي السبيعي",
-    org: "شركة السبيعي القابضة",
-    subject: "تنفيذ حكم بسداد دين تجاري",
-    court: "محكمة التنفيذ بالرياض",
-    lawyer: "أ. سارة القحطاني",
-    deadline: "2026-06-11",
-    daysLeft: 1,
-    caseNo: "EX-6612",
-  },
-  {
-    client: "منيرة الزهراني",
-    org: "مجموعة الزهراني الطبية",
-    subject: "نزاع ملكية عقار وقسمة تركة",
-    court: "المحكمة العامة بالرياض",
-    lawyer: "أ. خالد العتيبي",
-    deadline: "2026-07-02",
-    daysLeft: 22,
-    caseNo: "GN-3344",
-  },
-  {
-    client: "بدر القرني",
-    org: "مؤسسة القرني للنقل",
-    subject: "مطالبة بالتعويض عن أضرار مركبات",
-    court: "المحكمة العامة بالرياض",
-    lawyer: "أ. ريم الغامدي",
-    deadline: "2026-06-16",
-    daysLeft: 6,
-    caseNo: "GN-3390",
-  },
+// Demo fallback (shown only when no firm/DB yet). Shaped like ClientItem.
+const FALLBACK_CLIENTS: ClientItem[] = [
+  { id: "TJ-4471", name: "عبدالعزيز الدوسري", type: "شركة", contact: "0501244710", status: "نشط", lawyer: "أ. سارة القحطاني" },
+  { id: "AH-2098", name: "نورة الشهري", type: "شركة", contact: "0552098110", status: "نشط", lawyer: "أ. خالد العتيبي" },
+  { id: "LB-1320", name: "فهد بن سعد المطيري", type: "شركة", contact: "0561320440", status: "نشط", lawyer: "أ. ريم الغامدي" },
+  { id: "AD-0775", name: "هند العنزي", type: "فرد", contact: "0540775220", status: "معلق", lawyer: "أ. ماجد الحربي" },
+  { id: "EX-6612", name: "تركي السبيعي", type: "شركة", contact: "0506612330", status: "نشط", lawyer: "أ. سارة القحطاني" },
+  { id: "GN-3344", name: "منيرة الزهراني", type: "شركة", contact: "0553344550", status: "معلق", lawyer: "أ. خالد العتيبي" },
+  { id: "GN-3390", name: "بدر القرني", type: "شركة", contact: "0563390660", status: "نشط", lawyer: "أ. ريم الغامدي" },
 ];
 
-export default async function ClientCasesPage({
-  params,
-}: {
-  params: Promise<{ tenant: string }>;
-}) {
-  await params;
+export default function ClientCasesPage() {
+  const { data: clients } = useQafData(fetchClients, FALLBACK_CLIENTS);
 
-  const total = CASES.length;
-  const urgent = CASES.filter((c) => c.daysLeft <= 3).length;
-  const thisWeek = CASES.filter((c) => c.daysLeft <= 7).length;
-  const lawyers = new Set(CASES.map((c) => c.lawyer)).size;
+  const total = clients.length;
+  const lawyers = new Set(clients.map((c) => c.lawyer).filter(Boolean)).size;
 
   return (
     <>
@@ -147,7 +61,7 @@ export default async function ClientCasesPage({
           />
           <StatCard
             label="مواعيد عاجلة"
-            value={urgent}
+            value="—"
             icon="🔴"
             accent="warn"
             trend={{ v: "خلال 3 أيام", up: false }}
@@ -155,7 +69,7 @@ export default async function ClientCasesPage({
           />
           <StatCard
             label="مواعيد هذا الأسبوع"
-            value={thisWeek}
+            value="—"
             icon="📅"
             accent="info"
             hint="ضمن 7 أيام"
@@ -171,12 +85,11 @@ export default async function ClientCasesPage({
 
         {/* Client case cards */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {CASES.map((c) => {
-            const u = urgencyOf(c.daysLeft);
-            const uColor = URGENCY_VAR[u];
+          {clients.map((c) => {
+            const uColor = statusColor(c.status);
             return (
               <article
-                key={c.caseNo}
+                key={c.id}
                 className="card flex flex-col gap-3 border-t-2"
                 style={{ borderTopColor: uColor }}
               >
@@ -184,10 +97,10 @@ export default async function ClientCasesPage({
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <h3 className="font-bold text-base leading-tight truncate">
-                      {c.client}
+                      {c.name}
                     </h3>
                     <p className="text-xs text-[var(--text-faint)] truncate mt-0.5">
-                      {c.org}
+                      {c.type || "—"}
                     </p>
                   </div>
                   <span
@@ -198,7 +111,7 @@ export default async function ClientCasesPage({
                     }}
                   >
                     <span className="num font-black text-lg" dir="ltr">
-                      {c.daysLeft}
+                      —
                     </span>
                     <span className="text-[9px] mt-0.5">يوم متبقٍ</span>
                   </span>
@@ -206,16 +119,16 @@ export default async function ClientCasesPage({
 
                 {/* Subject */}
                 <div className="text-sm text-[var(--text)] break-words leading-relaxed">
-                  {c.subject}
+                  {c.contact || "—"}
                 </div>
 
                 {/* Court + case no */}
                 <div className="flex flex-wrap items-center gap-2 text-xs">
                   <span className="pill pill-brand truncate max-w-full">
-                    {c.court}
+                    {c.status}
                   </span>
                   <span className="num text-[var(--text-faint)]" dir="ltr">
-                    #{c.caseNo}
+                    #{c.id}
                   </span>
                 </div>
 
@@ -226,7 +139,7 @@ export default async function ClientCasesPage({
                       👤
                     </span>
                     <span className="text-xs text-[var(--text-muted)] truncate">
-                      {c.lawyer}
+                      {c.lawyer || "—"}
                     </span>
                   </div>
                   <div className="text-left shrink-0">
@@ -234,10 +147,10 @@ export default async function ClientCasesPage({
                       className="text-[10px] font-medium"
                       style={{ color: uColor }}
                     >
-                      {urgencyLabel(c.daysLeft)}
+                      {c.status}
                     </div>
                     <div className="num text-xs text-[var(--text-muted)]" dir="ltr">
-                      {c.deadline}
+                      —
                     </div>
                   </div>
                 </div>

@@ -130,3 +130,92 @@ export interface MemoItem {
   author: string;
   due: string;
 }
+
+export interface AttendanceItem {
+  id: string | number;
+  name: string;
+  role: string;
+  status: string; // present | absent | late | leave
+  checkIn: string;
+  commitment: number;
+}
+
+export interface RequestItem {
+  id: string | number;
+  code: string;
+  employee: string;
+  role: string;
+  type: string;
+  period: string;
+  reason: string;
+  amount?: string;
+  submitted: string;
+  status: string; // بانتظار الموافقة | معتمدة | مرفوضة
+}
+
+export interface SalaryItem {
+  id: string | number;
+  name: string;
+  role: string;
+  base: number;
+  allowances: number;
+  deductions: number;
+  status: string; // مدفوع | معلّق
+  month: string;
+}
+
+export interface TicketItem {
+  id: string | number;
+  subject: string;
+  body: string;
+  priority: string;
+  status: string;
+  requester: string;
+  created: string;
+}
+
+// ---- Admin (platform operator) shapes ----
+export interface AdminTenantRow {
+  id: string;
+  slug: string;
+  name: string;
+  plan: string;
+  status: string; // trialing | active | past_due | suspended | cancelled
+  enabledAddons: string[];
+  trialEndsAt: string | null;
+  createdAt: string;
+}
+
+export interface AdminUserRow {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  status: string;
+  tenantId: string | null;
+  lastSeen: string;
+  createdAt: string;
+}
+
+export interface AdminGrantRow {
+  id: string;
+  tenantId: string;
+  grantType: string;
+  label: string;
+  addonKey: string | null;
+  startsAt: string;
+  expiresAt: string | null;
+  autoConvert: boolean;
+  reason: string;
+  status: string;
+}
+
+export interface AdminPaymentRow {
+  id: string;
+  tenantId: string;
+  amount: number;
+  status: string;
+  paymentType: string;
+  paidAt: string | null;
+  createdAt: string;
+}

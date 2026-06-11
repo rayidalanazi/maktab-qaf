@@ -1,6 +1,11 @@
+"use client";
+
+import { useParams } from "next/navigation";
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { ThemePickerPanel } from "@/components/theme/ThemeSwitcher";
+import { useSession } from "@/components/app/SessionProvider";
+import { BUNDLES } from "@/data/pricing";
 
 type SettingItem = {
   k: string;
@@ -11,24 +16,42 @@ type SettingItem = {
   muted?: boolean;
 };
 
-export default async function SettingsPage({ params }: { params: Promise<{ tenant: string }> }) {
-  const { tenant } = await params;
+function planLabel(plan: string): string {
+  const b = BUNDLES.find((x) => x.key === plan);
+  return b ? `${b.name_ar} — ${b.price_monthly_sar} ر.س/شهر` : plan;
+}
+
+export default function SettingsPage() {
+  const params = useParams<{ tenant: string }>();
+  const slug = params?.tenant ?? "raed";
+  const { tenant, profile, isReal } = useSession();
+
+  const real = isReal && tenant ? tenant : null;
+  const addonsCount = real ? (real.enabled_addons ?? []).length : 0;
 
   const sections: { title: string; items: SettingItem[] }[] = [
     {
       title: "معلومات المكتب",
       items: [
-        { k: "اسم المكتب", v: "شركة رائد للمحاماة" },
-        { k: "النطاق", v: `${tenant}.qaf.sa`, ltr: true },
-        { k: "البريد", v: "admin@raed-law.sa", ltr: true },
-        { k: "الجوال", v: "+966 50 123 4567", ltr: true },
+        { k: "اسم المكتب", v: real ? real.name : "شركة رائد للمحاماة" },
+        { k: "النطاق", v: `${real ? real.slug : slug}.qaf.sa`, ltr: true },
+        { k: "البريد", v: real ? (profile?.email ?? "—") : "admin@raed-law.sa", ltr: true },
+        real
+          ? { k: "مدير الحساب", v: profile?.full_name ?? "—" }
+          : { k: "الجوال", v: "+966 50 123 4567", ltr: true },
       ],
     },
     {
       title: "الباقة والفوترة",
       items: [
-        { k: "الباقة الحالية", v: "متوسط — 499 ر.س/شهر", brand: true },
-        { k: "المقاعد", v: "10/10 مستخدم + سكرتارية مجاناً" },
+        {
+          k: "الباقة الحالية",
+          v: real ? planLabel(real.plan) : "متوسط — 499 ر.س/شهر",
+          brand: true,
+        },
+        real
+          ? { k: "الإضافات المفعّلة", v: `${addonsCount} إضافة` }
+          : { k: "المقاعد", v: "10/10 مستخدم + سكرتارية مجاناً" },
         { k: "تاريخ التجديد القادم", v: "2026-07-10", ltr: true },
         { k: "طريقة الدفع", v: "•••• 4242 (Visa)", ltr: true },
       ],

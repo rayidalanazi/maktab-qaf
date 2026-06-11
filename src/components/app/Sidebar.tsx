@@ -41,7 +41,7 @@ export function Sidebar({
 }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { tenant, profile, isReal } = useSession();
+  const { tenant, profile, isReal, isOperator } = useSession();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   // Prefer the real signed-in firm/user; fall back to the build-time props.
@@ -142,6 +142,17 @@ export function Sidebar({
             </div>
           ))}
         </nav>
+
+        {/* Operator-only shortcut — never rendered for normal users/visitors */}
+        {isOperator && (
+          <Link
+            href="/admin"
+            className="mx-3 mb-2 flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold bg-[var(--accent)]/10 text-[var(--accent)] border border-[var(--accent)]/30 hover:bg-[var(--accent)]/20 transition-colors"
+          >
+            🛠 لوحة المشغّل
+            <span className="ms-auto text-[9px] font-mono opacity-70">OPERATOR</span>
+          </Link>
+        )}
 
         {/* User footer */}
         <div className="p-3 border-t border-[var(--border)] flex items-center gap-2.5">

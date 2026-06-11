@@ -1,25 +1,23 @@
+"use client";
+
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { StatCard } from "@/components/app/StatCard";
+import { useQafData } from "@/hooks/useQafData";
+import { fetchAttendance } from "@/lib/data/queries";
+import type { AttendanceItem } from "@/lib/data/types";
 
 type Status = "present" | "absent" | "late" | "leave";
 
-type Employee = {
-  name: string;
-  role: string;
-  status: Status;
-  checkIn: string;
-  commitment: number;
-};
-
-const EMPLOYEES: Employee[] = [
-  { name: "عبدالله الشهري", role: "محامٍ أول", status: "present", checkIn: "07:52", commitment: 97 },
-  { name: "نورة القحطاني", role: "مستشارة قانونية", status: "present", checkIn: "08:05", commitment: 94 },
-  { name: "فيصل العتيبي", role: "محامٍ مترافع", status: "late", checkIn: "09:18", commitment: 82 },
-  { name: "ريم الدوسري", role: "باحثة قانونية", status: "leave", checkIn: "—", commitment: 91 },
-  { name: "ماجد الحربي", role: "أخصائي تنفيذ", status: "absent", checkIn: "—", commitment: 76 },
-  { name: "سارة المطيري", role: "سكرتيرة تنفيذية", status: "present", checkIn: "07:46", commitment: 99 },
-  { name: "تركي الغامدي", role: "محاسب قانوني", status: "late", checkIn: "09:02", commitment: 88 },
+// Demo fallback (shown only when no firm/DB yet). Shaped like AttendanceItem.
+const FALLBACK_ATTENDANCE: AttendanceItem[] = [
+  { id: 1, name: "عبدالله الشهري", role: "محامٍ أول", status: "present", checkIn: "07:52", commitment: 97 },
+  { id: 2, name: "نورة القحطاني", role: "مستشارة قانونية", status: "present", checkIn: "08:05", commitment: 94 },
+  { id: 3, name: "فيصل العتيبي", role: "محامٍ مترافع", status: "late", checkIn: "09:18", commitment: 82 },
+  { id: 4, name: "ريم الدوسري", role: "باحثة قانونية", status: "leave", checkIn: "—", commitment: 91 },
+  { id: 5, name: "ماجد الحربي", role: "أخصائي تنفيذ", status: "absent", checkIn: "—", commitment: 76 },
+  { id: 6, name: "سارة المطيري", role: "سكرتيرة تنفيذية", status: "present", checkIn: "07:46", commitment: 99 },
+  { id: 7, name: "تركي الغامدي", role: "محاسب قانوني", status: "late", checkIn: "09:02", commitment: 88 },
 ];
 
 const STATUS_META: Record<Status, { label: string; varName: string }> = {
@@ -36,7 +34,7 @@ function initials(name: string): string {
 }
 
 function StatusBadge({ status }: { status: Status }) {
-  const meta = STATUS_META[status];
+  const meta = STATUS_META[status] ?? STATUS_META.present;
   return (
     <span
       className="pill text-xs font-medium whitespace-nowrap"
@@ -67,13 +65,13 @@ function CommitmentBar({ value }: { value: number }) {
   );
 }
 
-export default async function AttendancePage({ params }: { params: Promise<{ tenant: string }> }) {
-  await params;
+export default function AttendancePage() {
+  const { data: employees } = useQafData(fetchAttendance, FALLBACK_ATTENDANCE);
 
-  const present = EMPLOYEES.filter((e) => e.status === "present").length;
-  const absent = EMPLOYEES.filter((e) => e.status === "absent").length;
-  const late = EMPLOYEES.filter((e) => e.status === "late").length;
-  const leave = EMPLOYEES.filter((e) => e.status === "leave").length;
+  const present = employees.filter((e) => e.status === "present").length;
+  const absent = employees.filter((e) => e.status === "absent").length;
+  const late = employees.filter((e) => e.status === "late").length;
+  const leave = employees.filter((e) => e.status === "leave").length;
 
   return (
     <>
@@ -85,7 +83,7 @@ export default async function AttendancePage({ params }: { params: Promise<{ ten
       <main className="p-4 sm:p-6 max-w-7xl w-full">
         <PageHeader
           title="الحضور والانصراف"
-          sub={`اليوم 2026-06-10 · إجمالي الموظفين ${EMPLOYEES.length}`}
+          sub={`اليوم · إجمالي الموظفين ${employees.length}`}
           actions={<button className="btn btn-brand text-sm py-2.5">+ تسجيل حضور</button>}
         />
 
@@ -110,11 +108,11 @@ export default async function AttendancePage({ params }: { params: Promise<{ ten
               </tr>
             </thead>
             <tbody>
-              {EMPLOYEES.map((emp, i) => (
+              {employees.map((emp, i) => (
                 <tr
-                  key={emp.name}
+                  key={emp.id}
                   className={`text-right hover:bg-[var(--bg-hover)] transition-colors ${
-                    i !== EMPLOYEES.length - 1 ? "border-b border-[var(--border)]" : ""
+                    i !== employees.length - 1 ? "border-b border-[var(--border)]" : ""
                   }`}
                 >
                   <td className="py-3.5 px-4">
@@ -138,7 +136,7 @@ export default async function AttendancePage({ params }: { params: Promise<{ ten
                     </span>
                   </td>
                   <td className="py-3.5 px-4">
-                    <StatusBadge status={emp.status} />
+                    <StatusBadge status={emp.status as Status} />
                   </td>
                   <td className="py-3.5 px-4">
                     <CommitmentBar value={emp.commitment} />
