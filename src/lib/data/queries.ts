@@ -11,7 +11,7 @@ import { getSupabase } from "@/lib/supabase/client";
 import type {
   Case, DocItem, EventItem, TaskItem, UserItem, NotificationItem,
   InvoiceItem, ExpenseItem, ClientItem, MemoItem, QafProfile, QafTenant,
-  AttendanceItem, RequestItem, SalaryItem, TicketItem,
+  AttendanceItem, RequestItem, SalaryItem, TicketItem, InviteRow,
   AdminTenantRow, AdminUserRow, AdminGrantRow, AdminPaymentRow, AdminBundleRow,
 } from "./types";
 
@@ -172,7 +172,83 @@ export async function fetchDocuments(): Promise<DocItem[]> {
     case: r.case_number ?? "",
     uploader: r.uploader_name ?? "",
     date: (r.created_at ?? "").slice(0, 10),
+    path: r.storage_path ?? undefined,
   }));
+}
+
+/** Upload a file to the firm's private storage folder + record its metadata. */
+export async function uploadDocument(file: File, caseNumber?: string): Promise<void> {
+  const tenant_id = await myTenantId();
+  const sb = getSupabase();
+  const cleanName = file.name.replace(/[^\w.\- ؀-ۿ]/g, "_");
+  const path = `${tenant_id}/${Date.now()}-${cleanName}`;
+  const { error: upErr } = await sb.storage.from("qaf-documents").upload(path, file);
+  if (upErr) throw new QafDbError(upErr.message || "تعذّر رفع الملف", false);
+  const ext = (file.name.split(".").pop() || "FILE").toUpperCase().slice(0, 5);
+  const size = file.size >= 1048576
+    ? `${(file.size / 1048576).toFixed(1)} MB`
+    : `${Math.max(1, Math.round(file.size / 1024))} KB`;
+  const { data: prof } = await sb.from("qaf_users").select("full_name").limit(1).maybeSingle();
+  const { error: insErr } = await sb.from("qaf_documents").insert({
+    tenant_id,
+    name: file.name,
+    file_type: ext,
+    size_label: size,
+    storage_path: path,
+    uploader_name: prof?.full_name ?? "",
+    case_number: caseNumber || null,
+  });
+  wrap(insErr);
+}
+
+/** Short-lived signed URL to view/download a stored document. */
+export async function documentUrl(path: string): Promise<string> {
+  const sb = getSupabase();
+  const { data, error } = await sb.storage.from("qaf-documents").createSignedUrl(path, 600);
+  if (error) throw new QafDbError(error.message, false);
+  return data?.signedUrl ?? "";
+}
+
+// ---------------------------------------------------------------- team invites
+/** Invite a teammate by email. They auto-join the firm on their first login. */
+export async function inviteUser(email: string, fullName: string, role: string): Promise<void> {
+  const tenant_id = await myTenantId();
+  const sb = getSupabase();
+  const { error } = await sb.from("qaf_invitations").insert({
+    tenant_id,
+    email: email.trim().toLowerCase(),
+    full_name: fullName || null,
+    role: role || "lawyer",
+  });
+  wrap(error);
+}
+
+export async function fetchInvitations(): Promise<InviteRow[]> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from("qaf_invitations").select("*").eq("status", "invited")
+    .order("created_at", { ascending: false });
+  wrap(error);
+  return (data ?? []).map((r): InviteRow => ({
+    id: r.id, email: r.email, fullName: r.full_name ?? "", role: r.role, status: r.status,
+  }));
+}
+
+export async function revokeInvitation(id: string): Promise<void> {
+  const sb = getSupabase();
+  const { error } = await sb.from("qaf_invitations").update({ status: "revoked" }).eq("id", id);
+  wrap(error);
+}
+
+/**
+ * If the signed-in user has no firm yet, join the firm that invited their email.
+ * Returns the joined firm id, or null. Safe to call on every authenticated load.
+ */
+export async function maybeAcceptInvitation(): Promise<string | null> {
+  const sb = getSupabase();
+  const { data, error } = await sb.rpc("qaf_accept_invitation");
+  if (error) return null;
+  return (data as string | null) ?? null;
 }
 
 // ---------------------------------------------------------------- events

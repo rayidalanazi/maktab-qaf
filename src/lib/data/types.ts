@@ -52,6 +52,16 @@ export interface DocItem {
   case: string;
   uploader: string;
   date: string;
+  /** storage object path (real docs) — used to make a signed download URL */
+  path?: string;
+}
+
+export interface InviteRow {
+  id: string;
+  email: string;
+  fullName: string;
+  role: string;
+  status: string;
 }
 
 export interface EventItem {

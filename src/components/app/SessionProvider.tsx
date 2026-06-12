@@ -18,7 +18,8 @@ import {
 } from "react";
 import { getSupabase } from "@/lib/supabase/client";
 import {
-  fetchMyProfile, fetchMyTenant, maybeProvisionPendingFirm, isPlatformAdmin, QafDbError,
+  fetchMyProfile, fetchMyTenant, maybeProvisionPendingFirm, maybeAcceptInvitation,
+  isPlatformAdmin, QafDbError,
 } from "@/lib/data/queries";
 import type { QafProfile, QafTenant } from "@/lib/data/types";
 
@@ -79,6 +80,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           const newId = await maybeProvisionPendingFirm();
           if (newId) {
             prof = await fetchMyProfile();
+          }
+          // …or join a firm that invited this email (team invitation).
+          if (!prof || !prof.tenant_id) {
+            const joinedId = await maybeAcceptInvitation();
+            if (joinedId) prof = await fetchMyProfile();
           }
           if (!prof || !prof.tenant_id) {
             if (!cancelled) { setProfile(prof); setTenant(null); setMode("demo"); }
