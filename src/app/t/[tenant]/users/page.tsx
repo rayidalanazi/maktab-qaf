@@ -91,14 +91,16 @@ export default function UsersPage() {
             <p className="text-[11px] text-[var(--text-muted)] mb-2.5">
               يفتح الموظف الرابط، ينشئ حسابه، وينضم لمكتبك تلقائيًا. الرابط يُستخدم مرة واحدة.
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
               <input
                 readOnly value={createdLink} dir="ltr"
                 onFocus={(e) => e.currentTarget.select()}
-                className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-[var(--bg-card)] border border-[var(--border)] text-xs font-mono"
+                className="w-full sm:flex-1 min-w-0 px-3 py-2 rounded-lg bg-[var(--bg-card)] border border-[var(--border)] text-xs font-mono"
               />
-              <CopyButton value={createdLink} label="نسخ" />
-              <button onClick={() => setCreatedLink(null)} className="text-[var(--text-faint)] text-xs hover:text-[var(--text)]">إخفاء</button>
+              <div className="flex items-center gap-3 shrink-0">
+                <CopyButton value={createdLink} label="نسخ" />
+                <button onClick={() => setCreatedLink(null)} className="text-[var(--text-faint)] text-xs hover:text-[var(--text)]">إخفاء</button>
+              </div>
             </div>
           </div>
         )}

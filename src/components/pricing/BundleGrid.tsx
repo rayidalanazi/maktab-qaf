@@ -32,7 +32,7 @@ export function BundleGrid() {
                 key={b.key}
                 className={`card flex flex-col relative ${
                   b.is_recommended
-                    ? "border-[var(--brand)] bg-gradient-to-b from-[var(--brand)]/8 to-transparent shadow-2xl scale-[1.02]"
+                    ? "border-[var(--brand)] bg-gradient-to-b from-[var(--brand)]/8 to-transparent shadow-2xl md:scale-[1.02]"
                     : ""
                 }`}
               >

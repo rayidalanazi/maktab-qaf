@@ -40,7 +40,7 @@ export function Hero() {
         </div>
 
         {/* Headline — Arabic, bold, sarcastic */}
-        <h1 className="font-display font-black text-center text-5xl sm:text-6xl md:text-7xl lg:text-8xl leading-[1.05] tracking-tight mb-6 animate-float-up delay-100">
+        <h1 className="font-display font-black text-center text-4xl sm:text-6xl md:text-7xl lg:text-8xl leading-[1.05] tracking-tight mb-6 animate-float-up delay-100">
           مكتبك القانوني
           <br />
           <span className="text-gradient-brand">يستحق أكثر من Excel.</span>
