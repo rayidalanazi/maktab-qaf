@@ -12,7 +12,7 @@ import type {
   Case, DocItem, EventItem, TaskItem, UserItem, NotificationItem,
   InvoiceItem, ExpenseItem, ClientItem, MemoItem, QafProfile, QafTenant,
   AttendanceItem, RequestItem, SalaryItem, TicketItem,
-  AdminTenantRow, AdminUserRow, AdminGrantRow, AdminPaymentRow,
+  AdminTenantRow, AdminUserRow, AdminGrantRow, AdminPaymentRow, AdminBundleRow,
 } from "./types";
 
 /** Thrown shape is normalised so hooks can decide demo-fallback vs real-empty. */
@@ -818,4 +818,64 @@ export async function expireGrant(grantId: string): Promise<void> {
     .update({ status: "expired" })
     .eq("id", grantId);
   wrap(error);
+}
+
+// ---------------------------------------------------------------- editable tiers
+/** Read the (admin-editable) plan → addons definitions. */
+export async function fetchBundles(): Promise<AdminBundleRow[]> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from("qaf_bundles").select("*").order("sort", { ascending: true });
+  wrap(error);
+  return (data ?? []).map((r): AdminBundleRow => ({
+    bundleKey: r.bundle_key,
+    nameAr: r.name_ar,
+    priceSar: r.price_sar ?? 0,
+    addonKeys: r.addon_keys ?? [],
+    sort: r.sort ?? 0,
+  }));
+}
+
+/** Addons for one tier — used at signup to seed a new firm. Returns [] if unset. */
+export async function fetchBundleAddons(bundleKey: string): Promise<string[]> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from("qaf_bundles").select("addon_keys").eq("bundle_key", bundleKey).maybeSingle();
+  wrap(error);
+  return (data?.addon_keys as string[] | undefined) ?? [];
+}
+
+/** Admin: set which addons a tier includes (affects NEW signups immediately). */
+export async function updateBundleAddons(bundleKey: string, addonKeys: string[]): Promise<void> {
+  const sb = getSupabase();
+  const { error } = await sb
+    .from("qaf_bundles")
+    .update({ addon_keys: addonKeys, updated_at: new Date().toISOString() })
+    .eq("bundle_key", bundleKey);
+  wrap(error);
+}
+
+/**
+ * Admin: reflect a tier's addons onto EXISTING firms of that classification.
+ * Pure-add (union) — never strips a firm's à-la-carte purchases. Returns count.
+ */
+export async function applyTierAddonsToFirms(bundleKey: string, addonKeys: string[]): Promise<number> {
+  const sb = getSupabase();
+  const { data: firms, error } = await sb
+    .from("qaf_tenants").select("id, enabled_addons").eq("plan", bundleKey);
+  wrap(error);
+  let n = 0;
+  for (const f of firms ?? []) {
+    const current: string[] = f.enabled_addons ?? [];
+    const merged = Array.from(new Set([...current, ...addonKeys]));
+    if (merged.length !== current.length) {
+      const { error: uErr } = await sb
+        .from("qaf_tenants")
+        .update({ enabled_addons: merged, updated_at: new Date().toISOString() })
+        .eq("id", f.id);
+      wrap(uErr);
+      n++;
+    }
+  }
+  return n;
 }

@@ -219,3 +219,11 @@ export interface AdminPaymentRow {
   paidAt: string | null;
   createdAt: string;
 }
+
+export interface AdminBundleRow {
+  bundleKey: string;
+  nameAr: string;
+  priceSar: number;
+  addonKeys: string[];
+  sort: number;
+}

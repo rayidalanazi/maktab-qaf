@@ -7,6 +7,7 @@ import { AdminGate } from "@/components/admin/AdminGate";
 const ADMIN_NAV = [
   { href: "/admin", label: "نظرة عامة", icon: "📊" },
   { href: "/admin/tenants", label: "المكاتب", icon: "🏢" },
+  { href: "/admin/plans", label: "الباقات والفئات", icon: "📦" },
   { href: "/admin/users", label: "المستخدمون", icon: "👥" },
   { href: "/admin/grants", label: "المنح والعروض", icon: "🎁" },
   { href: "/admin/revenue", label: "الإيرادات", icon: "💰" },

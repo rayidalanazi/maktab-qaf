@@ -45,10 +45,39 @@ type GateState =
   | { kind: "live"; email: string }
   | { kind: "demo" };
 
+/** Operators sign in with a username + password; we map it to a synthetic email. */
+const OPERATOR_EMAIL_DOMAIN = "qaf-operator.app";
+
 export function AdminGate({ children }: { children: ReactNode }) {
   const [state, setState] = useState<GateState>({ kind: "checking" });
   const [val, setVal] = useState("");
   const [err, setErr] = useState(false);
+  const [uname, setUname] = useState("");
+  const [upass, setUpass] = useState("");
+  const [signingIn, setSigningIn] = useState(false);
+  const [signErr, setSignErr] = useState<string | null>(null);
+
+  async function submitCredentials(e: React.FormEvent) {
+    e.preventDefault();
+    setSignErr(null);
+    const u = uname.trim().toLowerCase();
+    if (!u || !upass) { setSignErr("أدخل اسم المستخدم وكلمة المرور."); return; }
+    setSigningIn(true);
+    try {
+      const sb = getSupabase();
+      const email = u.includes("@") ? u : `${u}@${OPERATOR_EMAIL_DOMAIN}`;
+      const { error } = await sb.auth.signInWithPassword({ email, password: upass });
+      if (error) {
+        setSignErr("اسم المستخدم أو كلمة المرور غير صحيحة.");
+        return;
+      }
+      await evaluate(); // → live if this account is a platform admin, else denied
+    } catch (e) {
+      setSignErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSigningIn(false);
+    }
+  }
 
   async function evaluate() {
     const sb = getSupabase();
@@ -202,10 +231,53 @@ export function AdminGate({ children }: { children: ReactNode }) {
           مكاتب المحاماة تدخل من <Link href="/login" className="text-[var(--brand)] hover:underline">صفحة الدخول</Link>.
         </p>
 
-        {/* Operator path: real Google sign-in + platform_admins check */}
+        {/* Operator path: username + password (mapped to a synthetic email) */}
         <div className="mb-2 text-[11px] font-mono text-[var(--text-faint)]">
           // دخول المشغّل (بيانات حية)
         </div>
+        <form onSubmit={submitCredentials} className="space-y-2.5">
+          <input
+            type="text"
+            autoComplete="username"
+            dir="ltr"
+            value={uname}
+            onChange={(e) => { setUname(e.target.value); setSignErr(null); }}
+            placeholder="اسم المستخدم"
+            className="w-full px-3.5 py-3 rounded-lg bg-[var(--bg-card)] border border-[var(--border)] outline-none focus:border-[var(--brand)] text-sm text-center"
+          />
+          <input
+            type="password"
+            autoComplete="current-password"
+            dir="ltr"
+            value={upass}
+            onChange={(e) => { setUpass(e.target.value); setSignErr(null); }}
+            placeholder="كلمة المرور"
+            className="w-full px-3.5 py-3 rounded-lg bg-[var(--bg-card)] border border-[var(--border)] outline-none focus:border-[var(--brand)] text-sm text-center"
+          />
+          {signErr && (
+            <div className="text-[11px] text-[var(--danger)] text-center">{signErr}</div>
+          )}
+          <button type="submit" disabled={signingIn} className="btn btn-brand w-full py-3 disabled:opacity-50">
+            {signingIn ? (
+              <span className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full border-2 border-black/30 border-t-black animate-spin" />
+                جاري الدخول...
+              </span>
+            ) : (
+              <>دخول المشغّل <span className="arrow-flip">→</span></>
+            )}
+          </button>
+        </form>
+
+        <div className="relative my-5">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-[var(--border)]" />
+          </div>
+          <div className="relative flex justify-center text-[10px] uppercase tracking-widest font-mono text-[var(--text-faint)]">
+            <span className="bg-[var(--bg-elev)] px-3">أو عبر Google</span>
+          </div>
+        </div>
+
         <GoogleSignInButton
           buttonText="signin_with"
           onSuccess={() => { void evaluate(); }}

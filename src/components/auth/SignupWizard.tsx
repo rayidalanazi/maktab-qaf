@@ -8,7 +8,7 @@ import { SuccessStep, type SuccessVariant } from "./signup/SuccessStep";
 import { getSupabase } from "@/lib/supabase/client";
 import {
   fetchMyProfile, fetchMyTenant, provisionTenant, applyBundleToTenant,
-  PENDING_FIRM_KEY, QafDbError,
+  fetchBundleAddons, PENDING_FIRM_KEY, QafDbError,
 } from "@/lib/data/queries";
 import { getBundle } from "@/data/pricing";
 import type { GoogleSignInResult } from "@/lib/supabase/google-signin";
@@ -161,9 +161,15 @@ export function SignupWizard() {
           haveSession = !!signUpData.session; // false when email confirmation is on
         }
 
-        // The chosen plan decides which features the office sees.
+        // The chosen plan decides which features the office sees. Prefer the
+        // admin-editable tier addons from the DB; fall back to the static catalog.
         const plan = workspace.firmSize || "bundle_base";
         const chosenBundle = getBundle(plan);
+        let planAddons = chosenBundle?.included_addon_keys ?? [];
+        try {
+          const dbAddons = await fetchBundleAddons(plan);
+          if (dbAddons.length) planAddons = dbAddons;
+        } catch { /* qaf_bundles not set up → use the static catalog */ }
 
         // Remember the firm so provisioning completes even if the session isn't
         // ready yet (email-confirmation flow finishes it on first real login).
@@ -172,7 +178,7 @@ export function SignupWizard() {
           name: workspace.firmNameAr,
           fullName: identity.fullName,
           plan,
-          addons: chosenBundle?.included_addon_keys ?? [],
+          addons: planAddons,
         };
         try {
           localStorage.setItem(PENDING_FIRM_KEY, JSON.stringify(pendingFirm));
@@ -189,8 +195,8 @@ export function SignupWizard() {
               fullName: pendingFirm.fullName,
               plan,
             });
-            if (tid && chosenBundle) {
-              await applyBundleToTenant(tid, chosenBundle.key, chosenBundle.included_addon_keys);
+            if (tid) {
+              await applyBundleToTenant(tid, plan, planAddons);
             }
             try { localStorage.removeItem(PENDING_FIRM_KEY); } catch { /* ignore */ }
           } catch (e) {
