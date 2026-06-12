@@ -5,19 +5,17 @@ import {
 } from "react";
 import Link from "next/link";
 import { QafWordmark } from "@/components/landing/QafLogo";
-import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
 import { getSupabase } from "@/lib/supabase/client";
 import { isPlatformAdmin } from "@/lib/data/queries";
 
 /**
- * REAL admin gate — the operator area is fully separate from tenant users:
+ * REAL admin gate — the operator area is fully separate from tenant users and
+ * uses USERNAME + PASSWORD ONLY (no Google, no demo passphrase):
  *
- *   • LIVE  — signed in with Google AND auth.uid() ∈ qaf_platform_admins
- *             → real cross-tenant data (RLS unlocks it server-side).
+ *   • LIVE   — signed in with operator credentials AND auth.uid() ∈
+ *              qaf_platform_admins → real cross-tenant data (RLS unlocks it).
  *   • DENIED — signed in but NOT a platform admin → hard refusal screen.
- *             A law-firm user can NEVER see operator data (enforced by RLS,
- *             not just this UI).
- *   • DEMO  — passphrase-unlocked showcase with mock data + a loud banner.
+ *              A law-firm user can NEVER see operator data (enforced by RLS).
  *
  * Admin pages read the mode via useAdminSession()/useAdminData().
  */
@@ -35,23 +33,17 @@ export function useAdminSession(): AdminSessionState {
   return useContext(AdminCtx);
 }
 
-const DEMO_PASSPHRASE = "qaf-admin";
-const UNLOCK_KEY = "qaf-admin-unlocked";
-
 type GateState =
   | { kind: "checking" }
-  | { kind: "locked" }                       // visitor: sign-in or demo passphrase
+  | { kind: "locked" }                       // visitor: operator username + password
   | { kind: "denied"; email: string }        // signed-in non-admin
-  | { kind: "live"; email: string }
-  | { kind: "demo" };
+  | { kind: "live"; email: string };
 
 /** Operators sign in with a username + password; we map it to a synthetic email. */
 const OPERATOR_EMAIL_DOMAIN = "qaf-operator.app";
 
 export function AdminGate({ children }: { children: ReactNode }) {
   const [state, setState] = useState<GateState>({ kind: "checking" });
-  const [val, setVal] = useState("");
-  const [err, setErr] = useState(false);
   const [uname, setUname] = useState("");
   const [upass, setUpass] = useState("");
   const [signingIn, setSigningIn] = useState(false);
@@ -86,27 +78,11 @@ export function AdminGate({ children }: { children: ReactNode }) {
 
     if (sess.session) {
       const admin = await isPlatformAdmin();
-      if (admin) {
-        setState({ kind: "live", email: email ?? "" });
-        return;
-      }
-      // Signed in but not an operator → explicit denial (demo still possible).
-      try {
-        if (sessionStorage.getItem(UNLOCK_KEY) === "1") {
-          setState({ kind: "demo" });
-          return;
-        }
-      } catch { /* ignore */ }
+      if (admin) { setState({ kind: "live", email: email ?? "" }); return; }
+      // Signed in but not an operator → explicit denial.
       setState({ kind: "denied", email: email ?? "" });
       return;
     }
-
-    try {
-      if (sessionStorage.getItem(UNLOCK_KEY) === "1") {
-        setState({ kind: "demo" });
-        return;
-      }
-    } catch { /* ignore */ }
     setState({ kind: "locked" });
   }
 
@@ -115,19 +91,8 @@ export function AdminGate({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function submitDemo(e: React.FormEvent) {
-    e.preventDefault();
-    if (val.trim().toLowerCase() === DEMO_PASSPHRASE) {
-      try { sessionStorage.setItem(UNLOCK_KEY, "1"); } catch { /* ignore */ }
-      setState({ kind: "demo" });
-    } else {
-      setErr(true);
-    }
-  }
-
   async function signOutAndRetry() {
     try { await getSupabase().auth.signOut(); } catch { /* ignore */ }
-    try { sessionStorage.removeItem(UNLOCK_KEY); } catch { /* ignore */ }
     setState({ kind: "locked" });
   }
 
@@ -165,23 +130,6 @@ export function AdminGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (state.kind === "demo") {
-    return (
-      <AdminCtx.Provider value={{ mode: "demo", email: null }}>
-        <div className="bg-[var(--warn)]/10 border-b border-[var(--warn)]/30 text-[var(--warn)] text-[11px] font-mono px-4 py-1.5 flex items-center justify-between gap-2" dir="rtl">
-          <span className="flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-[var(--warn)]" />
-            وضع العرض — بيانات تجريبية فقط، لا تعكس مكاتب حقيقية
-          </span>
-          <button onClick={signOutAndRetry} className="underline hover:no-underline">
-            دخول المشغّل ←
-          </button>
-        </div>
-        {children}
-      </AdminCtx.Provider>
-    );
-  }
-
   if (state.kind === "denied") {
     return (
       <div className="min-h-screen grid place-items-center p-6 bg-[var(--bg)] text-[var(--text)] bg-noise relative" dir="rtl">
@@ -211,7 +159,7 @@ export function AdminGate({ children }: { children: ReactNode }) {
     );
   }
 
-  // locked — visitor gate: operator sign-in OR demo passphrase.
+  // locked — operator gate: USERNAME + PASSWORD ONLY.
   return (
     <div className="min-h-screen grid place-items-center p-6 bg-[var(--bg)] text-[var(--text)] bg-noise relative" dir="rtl">
       <div
@@ -231,9 +179,8 @@ export function AdminGate({ children }: { children: ReactNode }) {
           مكاتب المحاماة تدخل من <Link href="/login" className="text-[var(--brand)] hover:underline">صفحة الدخول</Link>.
         </p>
 
-        {/* Operator path: username + password (mapped to a synthetic email) */}
         <div className="mb-2 text-[11px] font-mono text-[var(--text-faint)]">
-          // دخول المشغّل (بيانات حية)
+          // دخول المشغّل — اسم مستخدم وكلمة مرور
         </div>
         <form onSubmit={submitCredentials} className="space-y-2.5">
           <input
@@ -269,50 +216,7 @@ export function AdminGate({ children }: { children: ReactNode }) {
           </button>
         </form>
 
-        <div className="relative my-5">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-[var(--border)]" />
-          </div>
-          <div className="relative flex justify-center text-[10px] uppercase tracking-widest font-mono text-[var(--text-faint)]">
-            <span className="bg-[var(--bg-elev)] px-3">أو عبر Google</span>
-          </div>
-        </div>
-
-        <GoogleSignInButton
-          buttonText="signin_with"
-          onSuccess={() => { void evaluate(); }}
-          onError={() => { /* surfaced inside the button */ }}
-        />
-
-        <div className="relative my-5">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-[var(--border)]" />
-          </div>
-          <div className="relative flex justify-center text-[10px] uppercase tracking-widest font-mono text-[var(--text-faint)]">
-            <span className="bg-[var(--bg-elev)] px-3">أو عرض تجريبي</span>
-          </div>
-        </div>
-
-        <form onSubmit={submitDemo}>
-          <input
-            type="password"
-            value={val}
-            onChange={(e) => { setVal(e.target.value); setErr(false); }}
-            placeholder="عبارة العرض التجريبي"
-            dir="ltr"
-            className="w-full px-3.5 py-3 rounded-lg bg-[var(--bg-card)] border border-[var(--border)] outline-none focus:border-[var(--brand)] text-sm text-center"
-          />
-          {err && (
-            <div className="mt-2 text-[11px] text-[var(--danger)] text-center">
-              عبارة غير صحيحة. حاول مرة ثانية.
-            </div>
-          )}
-          <button type="submit" className="btn btn-ghost w-full mt-3 py-2.5 text-sm">
-            دخول وضع العرض (بيانات تجريبية)
-          </button>
-        </form>
-
-        <p className="text-[10px] text-[var(--text-faint)] text-center mt-4 font-mono">
+        <p className="text-[10px] text-[var(--text-faint)] text-center mt-5 font-mono">
           // الصلاحية الحقيقية تُفرض بـ RLS على مستوى قاعدة البيانات
         </p>
       </div>
