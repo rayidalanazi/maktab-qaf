@@ -53,7 +53,7 @@ export async function fetchMyTenant(tenantId: string): Promise<QafTenant | null>
   const sb = getSupabase();
   const { data, error } = await sb
     .from("qaf_tenants")
-    .select("id, slug, name, name_en, plan, enabled_addons, status, trial_ends_at")
+    .select("id, slug, name, name_en, plan, enabled_addons, status, trial_ends_at, owner_id")
     .eq("id", tenantId)
     .maybeSingle();
   wrap(error);
@@ -548,25 +548,54 @@ export async function saveOfficePolygon(label: string, points: LatLng[]): Promis
     .limit(1).maybeSingle();
   wrap(selErr);
 
+  const payload = { label: label || "نطاق المكتب", polygon: clean, geofence_kind: "polygon" };
   if (existing?.id) {
-    const { error } = await sb
-      .from("qaf_office_locations")
-      .update({ label: label || "نطاق المكتب", polygon: clean, geofence_kind: "polygon" })
-      .eq("id", existing.id);
+    const { data: upd, error } = await sb
+      .from("qaf_office_locations").update(payload).eq("id", existing.id).select("id");
     if (error) throw new QafDbError(error.message, false);
+    // row vanished between select and update (concurrent delete) → re-insert
+    if (!upd || upd.length === 0) await insertPolygon(sb, tenant_id, payload);
   } else {
-    const { error } = await sb.from("qaf_office_locations").insert({
-      tenant_id, label: label || "نطاق المكتب", geofence_kind: "polygon", polygon: clean,
-    });
-    if (error) throw new QafDbError(error.message, false);
+    await insertPolygon(sb, tenant_id, payload);
   }
+
+  // mutual exclusion: a drawn polygon is the ONE boundary — purge any legacy/stray
+  // circle rows so they can never widen it (defense-in-depth; the RPC also ignores
+  // circles when a polygon exists).
+  await sb.from("qaf_office_locations").delete().eq("tenant_id", tenant_id).eq("geofence_kind", "circle");
 }
 
-/** Admin: pin a legacy CIRCLE office geofence to the manager's CURRENT location. */
+async function insertPolygon(
+  sb: ReturnType<typeof getSupabase>, tenant_id: string,
+  payload: { label: string; polygon: LatLng[]; geofence_kind: string },
+): Promise<void> {
+  const { error } = await sb.from("qaf_office_locations").insert({ tenant_id, ...payload });
+  if (!error) return;
+  // 23505 = unique violation: another tab already created the polygon row → update it instead
+  if ((error as { code?: string }).code === "23505") {
+    const { data: row } = await sb
+      .from("qaf_office_locations").select("id")
+      .eq("tenant_id", tenant_id).eq("geofence_kind", "polygon").limit(1).maybeSingle();
+    if (row?.id) {
+      const { error: e2 } = await sb.from("qaf_office_locations").update(payload).eq("id", row.id);
+      if (e2) throw new QafDbError(e2.message, false);
+      return;
+    }
+  }
+  throw new QafDbError(error.message, false);
+}
+
+/** Admin: pin a legacy CIRCLE office geofence to the manager's CURRENT location.
+ *  Refuses if a polygon boundary already exists (the polygon is authoritative). */
 export async function setOfficeHere(label: string, radius: number): Promise<void> {
-  const fix = await getGpsFix();
   const tenant_id = await myTenantId();
   const sb = getSupabase();
+  const { data: poly } = await sb
+    .from("qaf_office_locations").select("id")
+    .eq("tenant_id", tenant_id).eq("geofence_kind", "polygon").limit(1).maybeSingle();
+  if (poly?.id) throw new QafDbError("يوجد نطاق مرسوم بالفعل — احذفه أولاً لاستخدام نطاق دائري.", false);
+
+  const fix = await getGpsFix();
   const { error } = await sb.from("qaf_office_locations").insert({
     tenant_id, label: label || "المكتب الرئيسي", geofence_kind: "circle",
     lat: fix.lat, lng: fix.lng,

@@ -182,7 +182,7 @@ declare
   v_tenant uuid; v_name text;
   v_o record; v_dist double precision;
   v_best double precision := 1e12; v_best_id uuid; v_best_label text;
-  v_inside boolean := false; v_have_office boolean := false;
+  v_inside boolean := false; v_have_office boolean := false; v_has_polygon boolean := false;
   v_ip text; v_status text := 'accepted'; v_reason text := null;
   v_last record; v_secs double precision; v_move double precision;
   MAX_ACC constant real := 100;
@@ -202,9 +202,23 @@ begin
   elsif p_accuracy is null or p_accuracy > MAX_ACC then
     v_status := 'rejected'; v_reason := 'دقّة GPS ضعيفة (' || round(coalesce(p_accuracy, 999)) || 'م) — فعّل الموقع الدقيق وحاول بالخارج';
   else
-    -- (b) geofence: each office is a polygon (if drawn & valid) else a circle
+    -- (b) geofence: each office is a polygon (if drawn & valid) else a circle.
+    -- POLYGON PRECEDENCE: if the firm has drawn ANY valid polygon, ignore circle
+    -- offices entirely — a stray/legacy circle must never widen the drawn boundary.
+    select exists(
+      select 1 from public.qaf_office_locations
+      where tenant_id = v_tenant and polygon is not null
+        and jsonb_typeof(polygon) = 'array' and jsonb_array_length(polygon) >= 3
+    ) into v_has_polygon;
+
     for v_o in select * from public.qaf_office_locations where tenant_id = v_tenant loop
       v_have_office := true;
+
+      -- when a polygon boundary exists, skip every non-polygon (circle) office
+      if v_has_polygon and not (v_o.polygon is not null and jsonb_typeof(v_o.polygon) = 'array'
+         and jsonb_array_length(v_o.polygon) >= 3) then
+        continue;
+      end if;
 
       if v_o.polygon is not null and jsonb_typeof(v_o.polygon) = 'array'
          and jsonb_array_length(v_o.polygon) >= 3 then

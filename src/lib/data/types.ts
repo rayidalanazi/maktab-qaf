@@ -27,6 +27,8 @@ export interface QafTenant {
   enabled_addons: string[];
   status: string;
   trial_ends_at?: string | null;
+  /** qaf_users.id of the subscription owner (the account that created the firm) */
+  owner_id?: string | null;
 }
 
 // ---- UI shapes (match MOCK_* exactly) ----

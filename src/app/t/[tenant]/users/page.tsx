@@ -4,11 +4,26 @@ import { useState } from "react";
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { useQafData } from "@/hooks/useQafData";
+import { useSession } from "@/components/app/SessionProvider";
 import {
   fetchUsers, fetchInvitations, inviteUser, revokeInvitation,
 } from "@/lib/data/queries";
 import { MOCK_USERS } from "@/data/app-mock";
 import { RecordFormModal, type FormField } from "@/components/app/RecordFormModal";
+
+function OwnerPill({ owner }: { owner: boolean }) {
+  return (
+    <span
+      className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none"
+      style={owner
+        ? { background: "var(--brand)", color: "#000" }
+        : { background: "color-mix(in srgb, var(--text-faint) 22%, transparent)", color: "var(--text-muted)" }}
+      title={owner ? "مالك الاشتراك" : "موظف بالمكتب"}
+    >
+      {owner ? "مالك" : "موظف"}
+    </span>
+  );
+}
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "مدير النظام", general_manager: "مدير عام", manager: "مدير القضايا",
@@ -27,6 +42,8 @@ const INVITE_FIELDS: FormField[] = [
 export default function UsersPage() {
   const { data: users, reload: reloadUsers } = useQafData(fetchUsers, MOCK_USERS);
   const { data: invites, reload: reloadInvites } = useQafData(fetchInvitations, []);
+  const { tenant } = useSession();
+  const ownerId = tenant?.owner_id ?? null;
   const [openInvite, setOpenInvite] = useState(false);
 
   async function revoke(id: string | number) {
@@ -66,7 +83,10 @@ export default function UsersPage() {
                   <span className="w-9 h-9 rounded-full bg-[var(--brand-deep)] text-black grid place-items-center font-bold text-xs">
                     {u.initials}
                   </span>
-                  <div className="font-bold text-sm">{u.name}</div>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <div className="font-bold text-sm truncate">{u.name}</div>
+                    {ownerId && <OwnerPill owner={String(u.id) === ownerId} />}
+                  </div>
                 </div>
                 <div className="text-xs text-[var(--text-muted)] mb-2 md:mb-0 font-mono truncate" dir="ltr">
                   {u.email}

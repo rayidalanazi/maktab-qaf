@@ -43,6 +43,7 @@ export default function AttendancePage() {
   const [draft, setDraft] = useState<LatLng[]>([]);
   const [label, setLabel] = useState("نطاق المكتب");
   const [savingPoly, setSavingPoly] = useState(false);
+  const [polyResult, setPolyResult] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
     if (polygonOffice) {
@@ -76,24 +77,29 @@ export default function AttendancePage() {
 
   async function savePolygon() {
     if (draft.length < 3) {
-      setResult({ ok: false, text: "ارسم 3 نقاط على الأقل لتحديد النطاق." });
+      setPolyResult({ ok: false, text: "ارسم 3 نقاط على الأقل لتحديد النطاق." });
       return;
     }
     setSavingPoly(true);
-    setResult(null);
+    setPolyResult(null);
     try {
       await saveOfficePolygon(label, draft);
       reloadOffices();
-      setResult({ ok: true, text: `تم حفظ نطاق الحضور (${draft.length} نقطة).` });
+      setPolyResult({ ok: true, text: `تم حفظ نطاق الحضور (${draft.length} نقطة).` });
     } catch (e) {
-      setResult({ ok: false, text: e instanceof Error ? e.message : "تعذّر حفظ النطاق" });
+      setPolyResult({ ok: false, text: e instanceof Error ? e.message : "تعذّر حفظ النطاق" });
     } finally {
       setSavingPoly(false);
     }
   }
 
   async function removeBoundary(id: string) {
-    try { await deleteOffice(id); reloadOffices(); setDraft([]); } catch { /* ignore */ }
+    try {
+      await deleteOffice(id); reloadOffices(); setDraft([]);
+      setPolyResult({ ok: true, text: "تم حذف النطاق." });
+    } catch (e) {
+      setPolyResult({ ok: false, text: e instanceof Error ? e.message : "تعذّر الحذف" });
+    }
   }
 
   const today = checkins.filter((c) => isToday(c.time));
@@ -149,6 +155,8 @@ export default function AttendancePage() {
                 </button>
               )}
             </div>
+
+            {polyResult && <ResultBanner r={polyResult} />}
           </div>
         )}
 
@@ -183,19 +191,7 @@ export default function AttendancePage() {
             </button>
           </div>
 
-          {result && (
-            <div
-              className="mt-4 rounded-lg px-3.5 py-3 text-sm font-medium border flex items-start gap-2"
-              style={{
-                background: `color-mix(in srgb, var(${result.ok ? "--success" : "--danger"}) 12%, transparent)`,
-                borderColor: `color-mix(in srgb, var(${result.ok ? "--success" : "--danger"}) 35%, transparent)`,
-                color: `var(${result.ok ? "--success" : "--danger"})`,
-              }}
-            >
-              <span>{result.ok ? "✓" : "✕"}</span>
-              <span>{result.text}</span>
-            </div>
-          )}
+          {result && <ResultBanner r={result} />}
 
           {!isReal && (
             <p className="mt-3 text-[11px] text-[var(--text-faint)] font-mono">
@@ -278,6 +274,22 @@ export default function AttendancePage() {
         </div>
       </main>
     </>
+  );
+}
+
+function ResultBanner({ r }: { r: { ok: boolean; text: string } }) {
+  return (
+    <div
+      className="mt-3 rounded-lg px-3.5 py-3 text-sm font-medium border flex items-start gap-2"
+      style={{
+        background: `color-mix(in srgb, var(${r.ok ? "--success" : "--danger"}) 12%, transparent)`,
+        borderColor: `color-mix(in srgb, var(${r.ok ? "--success" : "--danger"}) 35%, transparent)`,
+        color: `var(${r.ok ? "--success" : "--danger"})`,
+      }}
+    >
+      <span>{r.ok ? "✓" : "✕"}</span>
+      <span>{r.text}</span>
+    </div>
   );
 }
 

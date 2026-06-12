@@ -34,6 +34,8 @@ export function PolygonMap({
   const markersRef = useRef<L.Marker[]>([]);
   const meMarkerRef = useRef<L.Marker | null>(null);
   const meCircleRef = useRef<L.Circle | null>(null);
+  const meLastRef = useRef<LatLng | null>(null);
+  const centeredOnceRef = useRef(false);
   const watchIdRef = useRef<number | null>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
@@ -155,6 +157,7 @@ export function PolygonMap({
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
         const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+        meLastRef.current = [lat, lng];
         if (!meMarkerRef.current) {
           meMarkerRef.current = Lx.marker([lat, lng], {
             icon: Lx.divIcon({
@@ -167,6 +170,11 @@ export function PolygonMap({
         } else {
           meMarkerRef.current.setLatLng([lat, lng]);
           meCircleRef.current?.setLatLng([lat, lng]).setRadius(accuracy);
+        }
+        // pan to the employee once on the first fix so the blue dot is never off-screen
+        if (!centeredOnceRef.current) {
+          centeredOnceRef.current = true;
+          map.setView([lat, lng], Math.max(map.getZoom(), 16));
         }
       },
       () => { /* non-fatal */ },
@@ -197,6 +205,21 @@ export function PolygonMap({
             onClick={() => { ptsRef.current = []; drawPolygon(); emit(); }}
           >
             مسح
+          </button>
+        </div>
+      )}
+      {mode === "view" && trackMe && (
+        <div className="absolute top-2 left-2 z-[500]">
+          <button
+            type="button"
+            className="btn btn-ghost text-xs py-1.5 px-2.5 !bg-[var(--bg-card)] shadow"
+            onClick={() => {
+              if (meLastRef.current && mapRef.current) {
+                mapRef.current.setView(meLastRef.current, Math.max(mapRef.current.getZoom(), 16));
+              }
+            }}
+          >
+            📍 موقعي
           </button>
         </div>
       )}

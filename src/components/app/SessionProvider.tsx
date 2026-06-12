@@ -33,6 +33,8 @@ interface SessionState {
   tenant: QafTenant | null;
   /** convenience: true once a signed-in user has a provisioned firm */
   isReal: boolean;
+  /** true when this user is the subscription OWNER (created the firm), vs an employee */
+  isOwner: boolean;
   /** true when the signed-in user is a قاف platform operator (qaf_platform_admins) */
   isOperator: boolean;
   /** force a re-fetch (e.g. right after provisioning) */
@@ -140,6 +142,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     profile,
     tenant,
     isReal: mode === "real",
+    isOwner: !!(profile && tenant?.owner_id && profile.id === tenant.owner_id),
     isOperator,
     refresh: () => resolveRef.current(),
   }), [mode, userId, email, profile, tenant, isOperator]);
@@ -154,7 +157,7 @@ export function useSession(): SessionState {
     // call useSession() harmlessly — they just get a static demo state.
     return {
       mode: "demo", userId: null, email: null, profile: null, tenant: null,
-      isReal: false, isOperator: false, refresh: () => {},
+      isReal: false, isOwner: false, isOperator: false, refresh: () => {},
     };
   }
   return ctx;

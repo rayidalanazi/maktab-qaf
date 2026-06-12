@@ -41,7 +41,7 @@ export function Sidebar({
 }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { tenant, profile, isReal, isOperator } = useSession();
+  const { tenant, profile, isReal, isOwner, isOperator } = useSession();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   // Prefer the real signed-in firm/user; fall back to the build-time props.
@@ -172,7 +172,22 @@ export function Sidebar({
             {effUserInitials}
           </span>
           <div className="flex-1 min-w-0">
-            <div className="font-semibold text-sm truncate">{effUserName}</div>
+            <div className="flex items-center gap-1.5">
+              <div className="font-semibold text-sm truncate">{effUserName}</div>
+              {isReal && (
+                <span
+                  className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none"
+                  style={
+                    isOwner
+                      ? { background: "var(--brand)", color: "#000" }
+                      : { background: "color-mix(in srgb, var(--text-faint) 22%, transparent)", color: "var(--text-muted)" }
+                  }
+                  title={isOwner ? "مالك الاشتراك" : "موظف بالمكتب"}
+                >
+                  {isOwner ? "مالك" : "موظف"}
+                </span>
+              )}
+            </div>
             <div className="text-[10px] text-[var(--text-faint)] truncate">
               {effUserRole}
             </div>

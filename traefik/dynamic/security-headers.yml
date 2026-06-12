@@ -22,8 +22,8 @@ http:
         # Referrer
         referrerPolicy: "strict-origin-when-cross-origin"
 
-        # Permissions Policy — disable risky APIs by default
-        permissionsPolicy: "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+        # Permissions Policy — disable risky APIs; geolocation=(self) required for GPS attendance check-in
+        permissionsPolicy: "camera=(), microphone=(), geolocation=(self), interest-cohort=()"
 
         # Hide server identification
         customResponseHeaders:
