@@ -19,6 +19,9 @@ create table if not exists public.qaf_office_locations (
 );
 create index if not exists idx_qaf_offices_tenant on public.qaf_office_locations (tenant_id);
 alter table public.qaf_office_locations enable row level security;
+-- strip Supabase's default GRANT ALL (TRUNCATE/TRIGGER/REFERENCES bypass RLS); keep only RLS-gated CRUD
+revoke all on public.qaf_office_locations from anon, authenticated;
+grant select, insert, update, delete on public.qaf_office_locations to authenticated;
 drop policy if exists qaf_offices_read on public.qaf_office_locations;
 create policy qaf_offices_read on public.qaf_office_locations for select to authenticated
   using (tenant_id = public.qaf_current_tenant() or public.qaf_is_platform_admin());
@@ -45,8 +48,9 @@ create table if not exists public.qaf_checkins (
 create index if not exists idx_qaf_checkins_tenant on public.qaf_checkins (tenant_id, server_time desc);
 create index if not exists idx_qaf_checkins_user on public.qaf_checkins (user_id, server_time desc);
 alter table public.qaf_checkins enable row level security;
--- Read for the firm; NO direct write — only the validating RPC (definer) writes.
-revoke insert, update, delete on public.qaf_checkins from anon, authenticated;
+-- Read-only for the firm; NO direct write/truncate — only the validating RPC (definer) writes.
+-- revoke ALL (not just write) so TRUNCATE/TRIGGER/REFERENCES can't wipe or tamper the audit log.
+revoke all on public.qaf_checkins from anon, authenticated;
 grant select on public.qaf_checkins to authenticated;
 drop policy if exists qaf_checkins_read on public.qaf_checkins;
 create policy qaf_checkins_read on public.qaf_checkins for select to authenticated
