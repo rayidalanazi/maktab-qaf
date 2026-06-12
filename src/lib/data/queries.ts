@@ -12,6 +12,7 @@ import type {
   Case, DocItem, EventItem, TaskItem, UserItem, NotificationItem,
   InvoiceItem, ExpenseItem, ClientItem, MemoItem, QafProfile, QafTenant,
   AttendanceItem, RequestItem, SalaryItem, TicketItem, InviteRow,
+  OfficeRow, CheckinRow, CheckinResult,
   AdminTenantRow, AdminUserRow, AdminGrantRow, AdminPaymentRow, AdminBundleRow,
 } from "./types";
 
@@ -467,6 +468,86 @@ export async function fetchAttendance(): Promise<AttendanceItem[]> {
       checkIn: r.check_in ?? "—",
       commitment: r.commitment_pct ?? 100,
     }));
+}
+
+// ---------------------------------------------------------------- GPS attendance
+export interface GpsFix { lat: number; lng: number; accuracy: number }
+
+/** A FRESH high-accuracy GPS fix (no cached position — anti-replay). */
+export function getGpsFix(): Promise<GpsFix> {
+  return new Promise((resolve, reject) => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      reject(new Error("هذا المتصفح لا يدعم تحديد الموقع.")); return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }),
+      (err) => {
+        const msg =
+          err.code === err.PERMISSION_DENIED ? "رُفض إذن الموقع — فعّله للمتصفع من إعدادات الجهاز."
+          : err.code === err.TIMEOUT ? "انتهت مهلة تحديد الموقع — حاول قرب نافذة أو بالخارج."
+          : "تعذّر تحديد موقعك الآن.";
+        reject(new Error(msg));
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+    );
+  });
+}
+
+/**
+ * Check in / out. The browser only sends the raw fix; the DB RPC alone decides
+ * accept/reject (geofence + accuracy + teleport) and stamps SERVER time.
+ */
+export async function checkIn(kind: "in" | "out"): Promise<CheckinResult> {
+  const fix = await getGpsFix();
+  const sb = getSupabase();
+  const ua = typeof navigator !== "undefined" ? navigator.userAgent : null;
+  const { data, error } = await sb.rpc("qaf_check_in", {
+    p_lat: fix.lat, p_lng: fix.lng, p_accuracy: fix.accuracy, p_kind: kind, p_user_agent: ua,
+  });
+  wrap(error);
+  return data as CheckinResult;
+}
+
+export async function fetchOffices(): Promise<OfficeRow[]> {
+  const sb = getSupabase();
+  const { data, error } = await sb.from("qaf_office_locations").select("*").order("created_at");
+  wrap(error);
+  return (data ?? []).map((o): OfficeRow => ({
+    id: o.id, label: o.label, lat: o.lat, lng: o.lng, radius: o.radius_m,
+  }));
+}
+
+/** Admin/GM: pin the office geofence to the manager's CURRENT location. */
+export async function setOfficeHere(label: string, radius: number): Promise<void> {
+  const fix = await getGpsFix();
+  const tenant_id = await myTenantId();
+  const sb = getSupabase();
+  const { error } = await sb.from("qaf_office_locations").insert({
+    tenant_id, label: label || "المكتب الرئيسي", lat: fix.lat, lng: fix.lng,
+    radius_m: Math.min(1000, Math.max(50, Math.round(radius) || 150)),
+  });
+  if (error) throw new QafDbError(error.message, false);
+}
+
+export async function deleteOffice(id: string): Promise<void> {
+  const sb = getSupabase();
+  const { error } = await sb.from("qaf_office_locations").delete().eq("id", id);
+  wrap(error);
+}
+
+/** Recent check-in events for the firm — read-only audit log (newest first). */
+export async function fetchRecentCheckins(): Promise<CheckinRow[]> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from("qaf_checkins").select("*")
+    .order("server_time", { ascending: false }).limit(60);
+  wrap(error);
+  return (data ?? []).map((r): CheckinRow => ({
+    id: r.id, name: r.employee_name ?? "—", kind: r.kind ?? "in",
+    status: r.status, reason: r.reject_reason, distance: r.distance_m,
+    accuracy: r.accuracy_m != null ? Math.round(r.accuracy_m) : null,
+    office: r.office_label, time: r.server_time, ip: r.ip,
+  }));
 }
 
 // ---------------------------------------------------------------- requests

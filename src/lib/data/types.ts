@@ -150,6 +150,36 @@ export interface AttendanceItem {
   commitment: number;
 }
 
+export interface OfficeRow {
+  id: string;
+  label: string;
+  lat: number;
+  lng: number;
+  radius: number;
+}
+
+export interface CheckinRow {
+  id: string;
+  name: string;
+  kind: string;          // in | out
+  status: string;        // accepted | rejected
+  reason: string | null;
+  distance: number | null;
+  accuracy: number | null;
+  office: string | null;
+  time: string;          // ISO server time
+  ip: string | null;
+}
+
+export interface CheckinResult {
+  status: string;
+  reason: string | null;
+  distance: number | null;
+  office: string | null;
+  kind: string;
+  at: string;
+}
+
 export interface RequestItem {
   id: string | number;
   code: string;
