@@ -64,6 +64,16 @@ export interface InviteRow {
   fullName: string;
   role: string;
   status: string;
+  token?: string | null;
+}
+
+export interface InviteLookup {
+  ok: boolean;
+  reason?: string;
+  firm?: string;
+  role?: string;
+  email?: string;
+  full_name?: string | null;
 }
 
 export interface EventItem {

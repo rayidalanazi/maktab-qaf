@@ -11,7 +11,7 @@ import { getSupabase } from "@/lib/supabase/client";
 import type {
   Case, DocItem, EventItem, TaskItem, UserItem, NotificationItem,
   InvoiceItem, ExpenseItem, ClientItem, MemoItem, QafProfile, QafTenant,
-  AttendanceItem, RequestItem, SalaryItem, TicketItem, InviteRow,
+  AttendanceItem, RequestItem, SalaryItem, TicketItem, InviteRow, InviteLookup,
   OfficeRow, CheckinRow, CheckinResult, LatLng,
   AdminTenantRow, AdminUserRow, AdminGrantRow, AdminPaymentRow, AdminBundleRow,
 } from "./types";
@@ -211,17 +211,26 @@ export async function documentUrl(path: string): Promise<string> {
 }
 
 // ---------------------------------------------------------------- team invites
-/** Invite a teammate by email. They auto-join the firm on their first login. */
-export async function inviteUser(email: string, fullName: string, role: string): Promise<void> {
+/** Invite a teammate. Returns the single-use token for the shareable join link. */
+export async function inviteUser(email: string, fullName: string, role: string): Promise<string> {
   const tenant_id = await myTenantId();
   const sb = getSupabase();
-  const { error } = await sb.from("qaf_invitations").insert({
+  const { data, error } = await sb.from("qaf_invitations").insert({
     tenant_id,
     email: email.trim().toLowerCase(),
     full_name: fullName || null,
     role: role || "lawyer",
-  });
+  }).select("token").single();
   wrap(error);
+  return (data?.token as string) ?? "";
+}
+
+/** Absolute, shareable join URL for an invite token (respects the deploy base path). */
+export function inviteLink(token: string): string {
+  if (typeof window === "undefined") return `/join/?t=${token}`;
+  const { origin, pathname } = window.location;
+  const base = pathname.includes("/t/") ? pathname.slice(0, pathname.indexOf("/t/")) : "";
+  return `${origin}${base}/join/?t=${token}`;
 }
 
 export async function fetchInvitations(): Promise<InviteRow[]> {
@@ -232,6 +241,7 @@ export async function fetchInvitations(): Promise<InviteRow[]> {
   wrap(error);
   return (data ?? []).map((r): InviteRow => ({
     id: r.id, email: r.email, fullName: r.full_name ?? "", role: r.role, status: r.status,
+    token: r.token ?? null,
   }));
 }
 
@@ -239,6 +249,22 @@ export async function revokeInvitation(id: string): Promise<void> {
   const sb = getSupabase();
   const { error } = await sb.from("qaf_invitations").update({ status: "revoked" }).eq("id", id);
   wrap(error);
+}
+
+/** Public (logged-out) lookup of an invite by token — for the /join page. */
+export async function lookupInvite(token: string): Promise<InviteLookup> {
+  const sb = getSupabase();
+  const { data, error } = await sb.rpc("qaf_invite_lookup", { p_token: token });
+  if (error) return { ok: false, reason: "error" };
+  return (data as InviteLookup) ?? { ok: false, reason: "error" };
+}
+
+/** Accept a token invite as the signed-in user → joins the firm (single use). */
+export async function acceptInviteToken(token: string): Promise<{ ok: boolean; reason?: string; tenant?: string }> {
+  const sb = getSupabase();
+  const { data, error } = await sb.rpc("qaf_accept_invite_token", { p_token: token });
+  if (error) return { ok: false, reason: error.message };
+  return (data as { ok: boolean; reason?: string; tenant?: string }) ?? { ok: false, reason: "error" };
 }
 
 /**

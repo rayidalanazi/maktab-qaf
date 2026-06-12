@@ -191,6 +191,9 @@ export function LoginForm() {
           أنشئ حساب مكتبك
         </Link>
       </p>
+      <p className="text-center text-[11px] text-[var(--text-faint)]">
+        موظف مدعوّ لأول مرة؟ افتح رابط الدعوة الذي وصلك من مالك المكتب.
+      </p>
     </form>
   );
 }

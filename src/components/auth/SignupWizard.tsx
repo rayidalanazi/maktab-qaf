@@ -259,6 +259,9 @@ export function SignupWizard() {
             <p className="text-sm text-[var(--text-muted)]">
               14 يوم. بدون بطاقة. بدون التزام. // اللي يبي يجرب، يجرب الحين
             </p>
+            <p className="mt-2 text-[11px] text-[var(--text-faint)]">
+              مدعوّ للانضمام لمكتب قائم؟ استخدم <span className="text-[var(--brand)]">رابط الدعوة</span> الذي وصلك بدل إنشاء مكتب جديد.
+            </p>
           </div>
           <IdentityStep
             values={identity}

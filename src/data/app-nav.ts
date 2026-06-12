@@ -91,7 +91,7 @@ export const APP_NAV: NavSection[] = [
   {
     title_ar: "النظام",
     items: [
-      { key: "users", label_ar: "المستخدمون", href: "/users", icon: "👥", roles: ["admin", "general_manager"] },
+      { key: "users", label_ar: "الفريق", href: "/users", icon: "👥", roles: ALL_ROLES },
       { key: "notifications", label_ar: "الإشعارات", href: "/notifications", icon: "🔔" },
       { key: "settings", label_ar: "الإعدادات", href: "/settings", icon: "⚙", roles: ["admin"] },
       { key: "support", label_ar: "الدعم", href: "/support", icon: "💬" },
