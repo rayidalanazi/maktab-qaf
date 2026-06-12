@@ -150,12 +150,16 @@ export interface AttendanceItem {
   commitment: number;
 }
 
+export type LatLng = [number, number]; // [lat, lng] — matches getGpsFix + the RPC
+
 export interface OfficeRow {
   id: string;
   label: string;
-  lat: number;
-  lng: number;
-  radius: number;
+  kind: "circle" | "polygon";
+  lat: number | null;     // circle offices
+  lng: number | null;
+  radius: number | null;
+  polygon: LatLng[] | null; // polygon offices: ring of [lat,lng] (>=3, open)
 }
 
 export interface CheckinRow {

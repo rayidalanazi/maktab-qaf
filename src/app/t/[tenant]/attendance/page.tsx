@@ -1,14 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { StatCard } from "@/components/app/StatCard";
+import { PolygonMap } from "@/components/app/PolygonMap";
 import { useQafData } from "@/hooks/useQafData";
 import { useSession } from "@/components/app/SessionProvider";
 import {
-  checkIn, fetchRecentCheckins, fetchOffices, setOfficeHere, deleteOffice,
+  checkIn, fetchRecentCheckins, fetchOffices, saveOfficePolygon, deleteOffice,
 } from "@/lib/data/queries";
+import type { LatLng } from "@/lib/data/types";
 
 function fmtTime(iso: string): string {
   try { return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }); }
@@ -25,15 +27,30 @@ function initials(name: string): string {
 
 export default function AttendancePage() {
   const { profile, isReal } = useSession();
-  const isManager = profile?.role === "admin" || profile?.role === "general_manager";
+  const isOwner = profile?.role === "admin"; // subscription owner
 
   const { data: checkins, reload } = useQafData(fetchRecentCheckins, []);
   const { data: offices, reload: reloadOffices } = useQafData(fetchOffices, []);
 
+  const polygonOffice =
+    offices.find((o) => o.kind === "polygon" && o.polygon && o.polygon.length >= 3) ?? null;
+  const hasGeofence = polygonOffice != null || offices.some((o) => o.kind === "circle" && o.lat != null);
+
   const [busy, setBusy] = useState<"in" | "out" | null>(null);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
-  const [officeBusy, setOfficeBusy] = useState(false);
-  const [radius, setRadius] = useState(150);
+
+  // owner draw-editor state
+  const [draft, setDraft] = useState<LatLng[]>([]);
+  const [label, setLabel] = useState("نطاق المكتب");
+  const [savingPoly, setSavingPoly] = useState(false);
+
+  useEffect(() => {
+    if (polygonOffice) {
+      setDraft(polygonOffice.polygon ?? []);
+      setLabel(polygonOffice.label || "نطاق المكتب");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [polygonOffice?.id, JSON.stringify(polygonOffice?.polygon)]);
 
   async function doCheck(kind: "in" | "out") {
     setBusy(kind);
@@ -57,64 +74,111 @@ export default function AttendancePage() {
     }
   }
 
-  async function pinOffice() {
-    setOfficeBusy(true);
+  async function savePolygon() {
+    if (draft.length < 3) {
+      setResult({ ok: false, text: "ارسم 3 نقاط على الأقل لتحديد النطاق." });
+      return;
+    }
+    setSavingPoly(true);
     setResult(null);
     try {
-      await setOfficeHere("المكتب الرئيسي", radius);
+      await saveOfficePolygon(label, draft);
       reloadOffices();
-      setResult({ ok: true, text: `تم ضبط موقع المكتب — النطاق ${radius}م` });
+      setResult({ ok: true, text: `تم حفظ نطاق الحضور (${draft.length} نقطة).` });
     } catch (e) {
-      setResult({ ok: false, text: e instanceof Error ? e.message : "تعذّر ضبط الموقع" });
+      setResult({ ok: false, text: e instanceof Error ? e.message : "تعذّر حفظ النطاق" });
     } finally {
-      setOfficeBusy(false);
+      setSavingPoly(false);
     }
   }
 
-  async function removeOffice(id: string) {
-    try { await deleteOffice(id); reloadOffices(); } catch { /* ignore */ }
+  async function removeBoundary(id: string) {
+    try { await deleteOffice(id); reloadOffices(); setDraft([]); } catch { /* ignore */ }
   }
 
   const today = checkins.filter((c) => isToday(c.time));
   const presentNames = new Set(today.filter((c) => c.status === "accepted" && c.kind === "in").map((c) => c.name));
   const rejectedToday = today.filter((c) => c.status === "rejected").length;
-  const radiusLabel = offices[0] ? `${offices[0].radius}م` : "—";
+  const kindLabel = polygonOffice ? "مضلّع مرسوم" : hasGeofence ? "دائرة" : "غير محدّد";
 
   return (
     <>
       <Topbar
         title="الحضور بالموقع"
-        sub="تسجيل حضور موثّق بالـ GPS — يُتحقّق على الخادم"
+        sub="نطاق الحضور يرسمه مالك الاشتراك على الخريطة — التحقّق على الخادم"
         breadcrumb={["الرئيسية", "الحضور"]}
       />
       <main className="p-4 sm:p-6 max-w-7xl w-full">
-        <PageHeader title="الحضور والانصراف" sub="بصمة موقع يصعب التحايل عليها — التحقّق يتم في الخادم لا في الجهاز" />
+        <PageHeader title="الحضور والانصراف" sub="حدود الدوام تُرسم على الخريطة؛ الموظف يسجّل حضوره بالدخول داخلها فعليًا" />
 
-        {/* ---- Check-in card ---- */}
-        <div className="card mb-5 relative overflow-hidden">
-          <div className="absolute inset-0 opacity-[0.04] pointer-events-none"
-               style={{ background: "radial-gradient(circle at 85% 15%, var(--brand) 0%, transparent 55%)" }} />
+        {/* ---- Owner: draw the attendance boundary ---- */}
+        {isOwner && (
+          <div className="card mb-5">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xl">🗺️</span>
+              <h3 className="font-bold text-base">نطاق الحضور (للمالك)</h3>
+            </div>
+            <p className="text-xs text-[var(--text-muted)] mb-3">
+              اضغط على الخريطة لإضافة زوايا حدود مكتبك (٣ نقاط على الأقل). اسحب أي نقطة لتعديلها. أي تسجيل خارج هذا النطاق يُرفض تلقائيًا.
+            </p>
+
+            <PolygonMap
+              key={`draw-${polygonOffice?.id ?? "new"}-${polygonOffice?.polygon?.length ?? 0}`}
+              mode="draw"
+              value={polygonOffice?.polygon ?? undefined}
+              onChange={setDraft}
+              heightClass="h-80"
+            />
+
+            <div className="flex flex-wrap items-end gap-2 mt-3">
+              <label className="block flex-1 min-w-[180px]">
+                <span className="block text-[10px] text-[var(--text-faint)] mb-1">اسم النطاق</span>
+                <input
+                  value={label}
+                  onChange={(e) => setLabel(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-card)] border border-[var(--border)] outline-none focus:border-[var(--brand)] text-sm"
+                />
+              </label>
+              <div className="text-xs text-[var(--text-muted)] num pb-2" dir="ltr">{draft.length} نقطة</div>
+              <button onClick={savePolygon} disabled={savingPoly || draft.length < 3} className="btn btn-brand text-sm py-2.5 disabled:opacity-60">
+                {savingPoly ? <Spinner label="جارٍ الحفظ…" /> : "💾 حفظ النطاق"}
+              </button>
+              {polygonOffice && (
+                <button onClick={() => removeBoundary(polygonOffice.id)} className="btn btn-ghost text-sm py-2.5 text-[var(--danger)]">
+                  حذف النطاق
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ---- Everyone: check in within the boundary ---- */}
+        <div className="card mb-5">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xl">📍</span>
             <h3 className="font-bold text-base">سجّل حضورك الآن</h3>
           </div>
-          <p className="text-xs text-[var(--text-muted)] mb-4">
-            يجب أن تكون داخل نطاق المكتب فعليًا. يُلتقط موقعك مرة واحدة ويُرسل للخادم للتحقّق.
+          <p className="text-xs text-[var(--text-muted)] mb-3">
+            يجب أن تكون داخل نطاق المكتب فعليًا. النقطة الزرقاء = موقعك الحالي.
           </p>
 
-          <div className="grid grid-cols-2 gap-3 max-w-md">
-            <button
-              onClick={() => doCheck("in")}
-              disabled={busy !== null}
-              className="btn btn-brand py-3.5 text-sm font-bold disabled:opacity-60"
-            >
+          {polygonOffice ? (
+            <PolygonMap mode="view" value={polygonOffice.polygon ?? undefined} trackMe heightClass="h-72" />
+          ) : (
+            <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--bg-card)] p-6 text-center text-sm text-[var(--text-muted)]">
+              {hasGeofence
+                ? "نطاق المكتب من النوع الدائري — التسجيل يعمل بالأسفل."
+                : isOwner
+                ? "لم تُحدّد نطاق الحضور بعد — ارسمه بالأعلى ثم احفظه."
+                : "لم يُحدّد مالك الاشتراك نطاق الحضور بعد."}
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3 max-w-md mt-4">
+            <button onClick={() => doCheck("in")} disabled={busy !== null} className="btn btn-brand py-3.5 text-sm font-bold disabled:opacity-60">
               {busy === "in" ? <Spinner label="جارٍ تحديد موقعك…" /> : "✓ تسجيل حضور"}
             </button>
-            <button
-              onClick={() => doCheck("out")}
-              disabled={busy !== null}
-              className="btn btn-ghost py-3.5 text-sm font-bold disabled:opacity-60"
-            >
+            <button onClick={() => doCheck("out")} disabled={busy !== null} className="btn btn-ghost py-3.5 text-sm font-bold disabled:opacity-60">
               {busy === "out" ? <Spinner label="جارٍ…" /> : "↩ تسجيل انصراف"}
             </button>
           </div>
@@ -144,58 +208,9 @@ export default function AttendancePage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-5">
           <StatCard label="حضور موثّق اليوم" value={presentNames.size} icon="✓" accent="success" hint="موظفون داخل النطاق" />
           <StatCard label="محاولات مرفوضة" value={rejectedToday} icon="⛔" accent="accent" hint="خارج النطاق/دقّة ضعيفة" />
-          <StatCard label="مواقع المكتب" value={offices.length} icon="🏢" accent="info" hint="نقاط مُعرّفة" />
-          <StatCard label="نطاق المكتب" value={radiusLabel} icon="🛡" accent="warn" hint="نصف القطر المسموح" />
+          <StatCard label="نوع النطاق" value={kindLabel} icon="🗺" accent="info" hint="حدود الحضور" />
+          <StatCard label="نقاط الحدود" value={polygonOffice?.polygon?.length ?? 0} icon="📐" accent="warn" hint="زوايا المضلّع" />
         </div>
-
-        {/* ---- Admin: office geofence ---- */}
-        {isManager && (
-          <div className="card mb-5">
-            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-              <div>
-                <h3 className="font-bold text-sm">نطاق المكتب (Geofence)</h3>
-                <p className="text-[11px] text-[var(--text-faint)]">قف داخل المكتب واضبط موقعه — أي تسجيل خارج النطاق يُرفض تلقائيًا</p>
-              </div>
-              <div className="flex items-end gap-2">
-                <label className="block">
-                  <span className="block text-[10px] text-[var(--text-faint)] mb-1">النطاق (م)</span>
-                  <input
-                    type="number" min={50} max={1000} value={radius}
-                    onChange={(e) => setRadius(Number(e.target.value))}
-                    className="num w-20 px-2.5 py-2 rounded-lg bg-[var(--bg-card)] border border-[var(--border)] outline-none focus:border-[var(--brand)] text-sm"
-                    dir="ltr"
-                  />
-                </label>
-                <button onClick={pinOffice} disabled={officeBusy} className="btn btn-brand text-sm py-2.5 disabled:opacity-60">
-                  {officeBusy ? <Spinner label="جارٍ…" /> : "📍 ضبط موقع المكتب الحالي"}
-                </button>
-              </div>
-            </div>
-
-            {offices.length === 0 ? (
-              <p className="text-xs text-[var(--text-muted)] bg-[var(--warn)]/10 border border-[var(--warn)]/30 rounded-lg px-3 py-2.5">
-                لم يُضبط موقع بعد — لن يُقبل أي تسجيل حتى تضبط نطاق المكتب من جهازك داخل المقر.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {offices.map((o) => (
-                  <div key={o.id} className="flex items-center justify-between bg-[var(--bg-hover)] rounded-lg px-3 py-2.5">
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-lg">🏢</span>
-                      <div>
-                        <div className="font-semibold text-sm">{o.label}</div>
-                        <div className="num text-[11px] text-[var(--text-faint)]" dir="ltr">
-                          {o.lat.toFixed(5)}, {o.lng.toFixed(5)} · r={o.radius}m
-                        </div>
-                      </div>
-                    </div>
-                    <button onClick={() => removeOffice(o.id)} className="text-[var(--danger)] text-xs hover:underline">حذف</button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
 
         {/* ---- Check-in log ---- */}
         <div className="card !p-0 overflow-x-auto">
@@ -223,9 +238,7 @@ export default function AttendancePage() {
                       <span className="font-medium truncate">{c.name}</span>
                     </div>
                   </td>
-                  <td className="py-3 px-4 whitespace-nowrap text-[var(--text-muted)]">
-                    {c.kind === "out" ? "↩ انصراف" : "✓ حضور"}
-                  </td>
+                  <td className="py-3 px-4 whitespace-nowrap text-[var(--text-muted)]">{c.kind === "out" ? "↩ انصراف" : "✓ حضور"}</td>
                   <td className="py-3 px-4 num text-[var(--text-muted)]" dir="ltr">{fmtTime(c.time)}</td>
                   <td className="py-3 px-4 num text-[var(--text-muted)]" dir="ltr">{c.distance != null ? `${c.distance}m` : "—"}</td>
                   <td className="py-3 px-4 num text-[var(--text-faint)]" dir="ltr">{c.accuracy != null ? `±${c.accuracy}m` : "—"}</td>
@@ -255,10 +268,10 @@ export default function AttendancePage() {
         <div className="card mt-5 bg-[var(--bg-hover)]/40">
           <h4 className="font-bold text-sm mb-2">🛡 لماذا يصعب التحايل عليه</h4>
           <ul className="text-[12px] text-[var(--text-muted)] space-y-1.5 leading-relaxed">
-            <li>• <b>التحقّق في الخادم</b> — القرار (داخل/خارج النطاق) يُحسب في قاعدة البيانات، لا يثق بما يرسله الجهاز.</li>
+            <li>• <b>المالك وحده يرسم النطاق</b> — لا يستطيع أي موظف تعديل حدود الحضور (محمي على مستوى قاعدة البيانات).</li>
+            <li>• <b>القرار داخل/خارج يُحسب في الخادم</b> — اختبار «هل النقطة داخل المضلّع» يتم في قاعدة البيانات، لا يثق بما يرسله الجهاز.</li>
             <li>• <b>الكتابة عبر دالة واحدة فقط</b> — لا يمكن حقن سجل حضور مزيّف مباشرة في القاعدة.</li>
-            <li>• <b>وقت الخادم</b> — يُختم بوقت الخادم لا وقت الجوال، فلا تلاعب بالساعة.</li>
-            <li>• <b>بوابة دقّة GPS</b> — يُرفض أي تسجيل دقّته أسوأ من 100م (يمنع المواقع التقريبية).</li>
+            <li>• <b>وقت الخادم + بوابة دقّة GPS</b> — يُرفض أي تسجيل دقّته أسوأ من 100م، والوقت من الخادم لا من الجوال.</li>
             <li>• <b>كشف القفز المكاني</b> — انتقال بسرعة غير منطقية بين تسجيلين يُرفض ويُراجَع.</li>
             <li>• <b>سجل تدقيق كامل</b> — كل محاولة (مقبولة/مرفوضة) تُحفظ بالإحداثيات والدقّة وIP.</li>
           </ul>

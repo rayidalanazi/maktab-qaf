@@ -12,7 +12,7 @@ import type {
   Case, DocItem, EventItem, TaskItem, UserItem, NotificationItem,
   InvoiceItem, ExpenseItem, ClientItem, MemoItem, QafProfile, QafTenant,
   AttendanceItem, RequestItem, SalaryItem, TicketItem, InviteRow,
-  OfficeRow, CheckinRow, CheckinResult,
+  OfficeRow, CheckinRow, CheckinResult, LatLng,
   AdminTenantRow, AdminUserRow, AdminGrantRow, AdminPaymentRow, AdminBundleRow,
 } from "./types";
 
@@ -510,20 +510,66 @@ export async function checkIn(kind: "in" | "out"): Promise<CheckinResult> {
 
 export async function fetchOffices(): Promise<OfficeRow[]> {
   const sb = getSupabase();
-  const { data, error } = await sb.from("qaf_office_locations").select("*").order("created_at");
+  const { data, error } = await sb
+    .from("qaf_office_locations")
+    .select("id, label, geofence_kind, lat, lng, radius_m, polygon")
+    .order("created_at");
   wrap(error);
   return (data ?? []).map((o): OfficeRow => ({
-    id: o.id, label: o.label, lat: o.lat, lng: o.lng, radius: o.radius_m,
+    id: o.id,
+    label: o.label,
+    kind: (o.geofence_kind as "circle" | "polygon") ?? (o.polygon ? "polygon" : "circle"),
+    lat: o.lat ?? null,
+    lng: o.lng ?? null,
+    radius: o.radius_m ?? null,
+    polygon: (o.polygon as LatLng[] | null) ?? null,
   }));
 }
 
-/** Admin/GM: pin the office geofence to the manager's CURRENT location. */
+/**
+ * OWNER (admin) only: save the firm's single attendance POLYGON (drawn on the map).
+ * `points` = ring of [lat,lng] (>=3, OPEN — the ring auto-closes in the RPC, do NOT
+ * repeat the first vertex). RLS rejects any non-owner; the UI also hides the editor.
+ * Upserts the firm's ONE polygon row (partial unique index = one per tenant).
+ */
+export async function saveOfficePolygon(label: string, points: LatLng[]): Promise<void> {
+  const clean = (Array.isArray(points) ? points : [])
+    .filter((p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]))
+    .map(([lat, lng]) => [Math.round(lat * 1e6) / 1e6, Math.round(lng * 1e6) / 1e6] as LatLng);
+  if (clean.length < 3) throw new QafDbError("ارسم نطاقاً من 3 نقاط على الأقل.", false);
+  if (clean.length > 120) throw new QafDbError("النطاق معقّد جداً — قلّل عدد النقاط.", false);
+
+  const tenant_id = await myTenantId();
+  const sb = getSupabase();
+
+  const { data: existing, error: selErr } = await sb
+    .from("qaf_office_locations")
+    .select("id").eq("tenant_id", tenant_id).eq("geofence_kind", "polygon")
+    .limit(1).maybeSingle();
+  wrap(selErr);
+
+  if (existing?.id) {
+    const { error } = await sb
+      .from("qaf_office_locations")
+      .update({ label: label || "نطاق المكتب", polygon: clean, geofence_kind: "polygon" })
+      .eq("id", existing.id);
+    if (error) throw new QafDbError(error.message, false);
+  } else {
+    const { error } = await sb.from("qaf_office_locations").insert({
+      tenant_id, label: label || "نطاق المكتب", geofence_kind: "polygon", polygon: clean,
+    });
+    if (error) throw new QafDbError(error.message, false);
+  }
+}
+
+/** Admin: pin a legacy CIRCLE office geofence to the manager's CURRENT location. */
 export async function setOfficeHere(label: string, radius: number): Promise<void> {
   const fix = await getGpsFix();
   const tenant_id = await myTenantId();
   const sb = getSupabase();
   const { error } = await sb.from("qaf_office_locations").insert({
-    tenant_id, label: label || "المكتب الرئيسي", lat: fix.lat, lng: fix.lng,
+    tenant_id, label: label || "المكتب الرئيسي", geofence_kind: "circle",
+    lat: fix.lat, lng: fix.lng,
     radius_m: Math.min(1000, Math.max(50, Math.round(radius) || 150)),
   });
   if (error) throw new QafDbError(error.message, false);
