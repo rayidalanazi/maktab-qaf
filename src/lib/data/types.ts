@@ -225,9 +225,12 @@ export interface TicketItem {
   subject: string;
   body: string;
   priority: string;
-  status: string;
+  status: string; // open | answered | closed
   requester: string;
   created: string;
+  reply?: string | null;       // operator's response (if any)
+  repliedAt?: string | null;
+  firm?: string | null;        // firm name — shown in the operator console
 }
 
 // ---- Admin (platform operator) shapes ----

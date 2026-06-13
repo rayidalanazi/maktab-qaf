@@ -708,7 +708,7 @@ export async function fetchTickets(): Promise<TicketItem[]> {
   const sb = getSupabase();
   const { data, error } = await sb
     .from("qaf_support_tickets")
-    .select("*")
+    .select("*, qaf_tenants(name)")
     .order("created_at", { ascending: false });
   wrap(error);
   return (data ?? []).map((r): TicketItem => ({
@@ -719,7 +719,19 @@ export async function fetchTickets(): Promise<TicketItem[]> {
     status: r.status ?? "open",
     requester: r.requester_name ?? "",
     created: (r.created_at ?? "").slice(0, 10),
+    reply: r.reply ?? null,
+    repliedAt: r.replied_at ? String(r.replied_at).slice(0, 10) : null,
+    firm: (r.qaf_tenants as { name?: string } | null)?.name ?? null,
   }));
+}
+
+/** Operator only: reply to / close a support ticket (platform-admin checked server-side). */
+export async function replyTicket(id: string | number, reply: string, status: string): Promise<void> {
+  const sb = getSupabase();
+  const { error } = await sb.rpc("qaf_reply_ticket", {
+    p_id: String(id), p_reply: reply ?? "", p_status: status || "answered",
+  });
+  wrap(error);
 }
 
 /** File a new support ticket from the tenant app. */

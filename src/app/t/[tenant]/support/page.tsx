@@ -1,11 +1,20 @@
 "use client";
 
+import { useState } from "react";
 import { Topbar } from "@/components/app/Topbar";
 import { PageHeader } from "@/components/app/PageHeader";
 import { StatCard } from "@/components/app/StatCard";
 import { useQafData } from "@/hooks/useQafData";
-import { fetchTickets } from "@/lib/data/queries";
+import { fetchTickets, createTicket } from "@/lib/data/queries";
+import { RecordFormModal, type FormField } from "@/components/app/RecordFormModal";
 import type { TicketItem } from "@/lib/data/types";
+
+const TICKET_FIELDS: FormField[] = [
+  { name: "subject", label: "الموضوع", required: true, placeholder: "اكتب عنواناً مختصراً للمشكلة" },
+  { name: "priority", label: "الأولوية", type: "select", half: true, default: "عادية",
+    options: ["عادية", "مرتفعة", "حرجة"].map((v) => ({ value: v, label: v })) },
+  { name: "body", label: "التفاصيل", type: "textarea", placeholder: "اشرح المشكلة أو الطلب بالتفصيل…" },
+];
 
 /* ============================================================
    Static content + demo fallback
@@ -77,7 +86,7 @@ const FAQ_ITEMS = [
   },
 ];
 
-type TicketStatus = "open" | "in_progress" | "resolved";
+type TicketStatus = "open" | "answered" | "closed";
 
 type DisplayTicket = {
   id: string | number;
@@ -87,6 +96,7 @@ type DisplayTicket = {
   agent: string;
   created: string;
   updated: string;
+  reply: string | null;
 };
 
 // Demo fallback (shown only when no firm/DB yet).
@@ -94,51 +104,55 @@ const FALLBACK_TICKETS: DisplayTicket[] = [
   {
     id: "QAF-1042",
     subject: "خطأ عند رفع مستند PDF أكبر من 20 ميجابايت",
-    category: "المستندات",
-    status: "in_progress",
-    agent: "فريق الدعم — نورة",
+    category: "مرتفعة",
+    status: "answered",
+    agent: "فريق قاف",
     created: "2026-06-08",
     updated: "2026-06-09",
+    reply: "تم رفع الحد الأقصى لحجم الملف إلى 50 ميجابايت لمكتبك. جرّب الآن.",
   },
   {
     id: "QAF-1037",
     subject: "طلب ترقية الباقة لإضافة 5 مستخدمين",
-    category: "الاشتراك",
+    category: "عادية",
     status: "open",
     agent: "بانتظار الرد",
     created: "2026-06-09",
     updated: "2026-06-09",
+    reply: null,
   },
   {
     id: "QAF-0998",
     subject: "تعذّر مزامنة مواعيد الجلسات مع تقويم جوجل",
-    category: "التكاملات",
-    status: "resolved",
-    agent: "فريق الدعم — سلطان",
+    category: "عادية",
+    status: "closed",
+    agent: "فريق قاف",
     created: "2026-05-28",
     updated: "2026-05-30",
+    reply: "تم حل المشكلة بعد تحديث صلاحيات التقويم. أُغلقت التذكرة.",
   },
 ];
 
 /** Map a real qaf_support_tickets row (TicketItem) into the page's display shape. */
 function toDisplay(t: TicketItem): DisplayTicket {
   const status: TicketStatus =
-    t.status === "in_progress" || t.status === "resolved" ? t.status : "open";
+    t.status === "answered" || t.status === "closed" ? t.status : "open";
   return {
     id: t.id,
     subject: t.subject,
     category: t.priority,
     status,
-    agent: t.requester || "بانتظار الرد",
+    agent: t.reply ? "فريق قاف" : "بانتظار الرد",
     created: t.created,
-    updated: t.created,
+    updated: t.repliedAt || t.created,
+    reply: t.reply ?? null,
   };
 }
 
 const STATUS_META: Record<TicketStatus, { label: string; color: string }> = {
   open: { label: "مفتوحة", color: "var(--warn)" },
-  in_progress: { label: "قيد المعالجة", color: "var(--info)" },
-  resolved: { label: "تم الحل", color: "var(--success)" },
+  answered: { label: "تم الرد", color: "var(--info)" },
+  closed: { label: "مغلقة", color: "var(--success)" },
 };
 
 const ACCENT_VARS: Record<string, string> = {
@@ -154,12 +168,13 @@ const ACCENT_VARS: Record<string, string> = {
    ============================================================ */
 
 export default function SupportPage() {
-  const { data: tickets } = useQafData<DisplayTicket>(
+  const { data: tickets, reload } = useQafData<DisplayTicket>(
     () => fetchTickets().then((rows) => rows.map(toDisplay)),
     FALLBACK_TICKETS,
   );
+  const [openTicket, setOpenTicket] = useState(false);
 
-  const openCount = tickets.filter((t) => t.status !== "resolved").length;
+  const openCount = tickets.filter((t) => t.status !== "closed").length;
 
   return (
     <>
@@ -173,7 +188,7 @@ export default function SupportPage() {
           title="الدعم الفني"
           sub="عندك سؤال أو مشكلة؟ اختر القناة الأنسب لك — نرد بسرعة وبلا تعقيد."
           actions={
-            <button className="btn btn-brand text-sm py-2.5">+ تذكرة دعم جديدة</button>
+            <button onClick={() => setOpenTicket(true)} className="btn btn-brand text-sm py-2.5">+ تذكرة دعم جديدة</button>
           }
         />
 
@@ -311,6 +326,13 @@ export default function SupportPage() {
                       <span className="num" dir="ltr">{t.updated}</span>
                     </span>
                   </div>
+
+                  {t.reply && (
+                    <div className="rounded-lg bg-[var(--brand)]/8 border border-[var(--brand)]/20 px-3 py-2.5 text-xs leading-relaxed">
+                      <div className="font-bold text-[var(--brand)] mb-1">💬 رد {t.agent}</div>
+                      <div className="text-[var(--text-muted)] break-words">{t.reply}</div>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -358,13 +380,16 @@ export default function SupportPage() {
               جزء من الباقة، مو إضافة.
             </p>
             <div className="flex flex-wrap justify-center gap-2 mt-1">
+              <button onClick={() => setOpenTicket(true)} className="btn btn-brand text-sm py-2.5">
+                🎫 افتح تذكرة دعم
+              </button>
               <a
                 href="https://wa.me/966551234567"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="btn btn-brand text-sm py-2.5"
+                className="btn btn-ghost text-sm py-2.5"
               >
-                💬 راسلنا على واتساب
+                💬 واتساب
               </a>
               <a href="mailto:support@qaf.sa" className="btn btn-ghost text-sm py-2.5">
                 ✉ support@qaf.sa
@@ -373,6 +398,16 @@ export default function SupportPage() {
           </div>
         </section>
       </main>
+
+      <RecordFormModal
+        open={openTicket}
+        onClose={() => setOpenTicket(false)}
+        title="تذكرة دعم جديدة"
+        sub="يصل طلبك مباشرة لفريق قاف ويُتابَع من لوحة المشغّل"
+        fields={TICKET_FIELDS}
+        submitLabel="إرسال التذكرة"
+        onSubmit={async (v) => { await createTicket({ subject: v.subject, body: v.body, priority: v.priority }); reload(); }}
+      />
     </>
   );
 }
